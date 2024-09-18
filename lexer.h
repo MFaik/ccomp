@@ -13,7 +13,13 @@ typedef enum {
     TERM_INT,
     TERM_VOID,
     TERM_RETURN,
+    TERM_NEG,
+    TERM_COMPLEMENT,
+    TERM_DECREMENT,
+    TERM_INCREMENT,
 } TermType;
+
+extern const char* TermNames[];
 
 typedef struct {
     TermType type;
@@ -27,3 +33,4 @@ typedef struct {
 vector_header(Term)
 
 VectorTerm lex(char* file);
+void pretty_print_term(Term term);

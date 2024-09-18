@@ -3,19 +3,28 @@
 #include "lexer.h"
 #include "string_view.h"
 
-//TODO: haven't used these
 typedef enum {
     STATEMENT_RETURN,
     STATEMENT_IF,
-} AstType;
+} StatementType;
+typedef enum {
+    EXP_CONSTANT,
+    EXP_UNARY_COMPLEMENT,
+    EXP_UNARY_NEG,
+} ExpressionType;
 
 typedef struct {
     StringView str;
 } AST_Identifier;
 
-typedef struct {
-    int constant;
-} AST_Expression;
+typedef struct AST_Expression AST_Expression;
+struct AST_Expression {
+    ExpressionType type;
+    union {
+        int constant;
+        AST_Expression* unary_exp;
+    };
+};
 
 typedef struct {
     AST_Expression ret;

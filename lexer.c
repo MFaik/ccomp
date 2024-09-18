@@ -1,10 +1,29 @@
 #include "lexer.h"
 vector_body(Term);
+const char* TermNames[] = {
+    "identifier",
+    "constant",
+    "open_par",
+    "close_par",
+    "open_brace",
+    "close_brace",
+    "semicolon",
+    "int",
+    "void",
+    "return",
+    "negate",
+    "complement",
+    "decrement",
+    "increment",
+};
 
 #include <ctype.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdio.h>
 
-char* code_ptr;
+static char* code_ptr;
+static int error = 0;
 
 struct {
     TermType tt;
@@ -16,16 +35,24 @@ struct {
     {TERM_RETURN, "return", 6}
 };
 
+//the symbols are in decreasing order 
+//as the longer ones take priority
 struct {
     TermType tt;
     const char* str;
     int size;
 } symbol_str[] = {
+    //two char symbols
+    {TERM_DECREMENT, "--", 2},
+    {TERM_INCREMENT, "++", 2},
+    //one char symbols
     {TERM_OPEN_PAR, "(", 1},
     {TERM_CLOSE_PAR, ")", 1},
     {TERM_OPEN_BRACE, "{", 1},
     {TERM_CLOSE_BRACE, "}", 1},
-    {TERM_SEMICOLON, ";", 1}
+    {TERM_SEMICOLON, ";", 1},
+    {TERM_NEG, "-", 1},
+    {TERM_COMPLEMENT, "~", 1},
 };
 
 void eat_identifier(VectorTerm *v) {
@@ -63,45 +90,70 @@ void eat_constant(VectorTerm *v) {
     code_ptr += cnt;
 }
 
-char is_symbol(char c) {
+bool is_paran(char c) {
+    return c=='('||c==')'||c=='['||c==']'||c=='{'||c=='}';
+}
+bool is_symbol(char c) {
     return !isalnum(c) && !isspace(c) && c != '_';
 }
-void eat_symbol(VectorTerm *v) {
+bool eat_symbol(VectorTerm *v) {
     unsigned cnt = 0;
-    while(is_symbol(*(code_ptr+cnt)))cnt++;
     Term t;
+    t.type = -1;
     for(int i = 0;i < sizeof(symbol_str)/sizeof(symbol_str[0]);i++) {
-        if(cnt == symbol_str[i].size &&
-                !strncmp(symbol_str[i].str, code_ptr, cnt)) {
+        if(!strncmp(symbol_str[i].str, code_ptr, symbol_str[i].size)) {
             t.type = symbol_str[i].tt;
+            cnt = symbol_str[i].size;
+            break;
         }
+    }
+    if(t.type == -1) {
+        return false;
     }
     insert_vectorTerm(v, t);
     code_ptr += cnt;
+    return true;
 }
 
-char make_term(VectorTerm *v) {
+bool make_term(VectorTerm *v) {
     while(isspace(*code_ptr))code_ptr++;
-    if(*code_ptr == 0) return 0;
+    if(*code_ptr == 0) return false;
     if(isalpha(*code_ptr)) {
         eat_identifier(v);
-        return 1;
+        return true;
     }
     if(isdigit(*code_ptr)) {
         eat_constant(v);
-        return 1;
+        return true;
     }
     if(is_symbol(*code_ptr)) {
-        eat_symbol(v);
-        return 1;
+        if(!eat_symbol(v)) {
+            printf("unknown symbol");
+            error = 1;
+            return false;
+        }
+        return true;
     }
-    return 0;
+    return false;
 }
 
 VectorTerm lex(char* file) {
+    error = 0;
     VectorTerm ret;
     init_vectorTerm(&ret, 16);
     code_ptr = file;
     while(make_term(&ret));
+    if(error) {
+        ret.size = 0;
+    }
     return ret;
+}
+
+void pretty_print_term(Term term) {
+    printf("%s", TermNames[term.type]);
+    if(term.type == TERM_IDENTIFIER) {
+        printf(" %.*s", term.s.len, term.s.start);
+    } else if(term.type == TERM_CONSTANT) {
+        printf(" %ld", term.constant);
+    }
 }
