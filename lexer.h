@@ -13,10 +13,20 @@ typedef enum {
     TERM_INT,
     TERM_VOID,
     TERM_RETURN,
-    TERM_NEG,
     TERM_COMPLEMENT,
     TERM_DECREMENT,
     TERM_INCREMENT,
+    TERM_PLUS,
+    TERM_MINUS,
+    TERM_ASTERISK,
+    TERM_FWD_SLASH,
+    TERM_PERCENT,
+    TERM_AMPERSAND,
+    TERM_PIPE,
+    TERM_HAT,
+    TERM_LEFT_SHIFT,
+    TERM_RIGHT_SHIFT,
+    TERM_EOF,
 } TermType;
 
 extern const char* TermNames[];

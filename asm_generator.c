@@ -1,5 +1,8 @@
 #include "asm_generator.h"
 
+#include <stdbool.h>
+
+#include "tacky.h"
 #include "vector.h"
 
 vector_body(ASM_Ins);
@@ -40,7 +43,7 @@ void assemble_mov(ASM_Operand src, ASM_Operand dst, VectorASM_Ins *v) {
 
 void assemble_unary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
     ASM_Operand src = assemble_operand(tac_ins.src);
-    ASM_Operand dst = assemble_operand(tac_ins.dst);
+    ASM_Operand dst = assemble_operand(tac_ins.unary_dst);
 
     assemble_mov(src, dst, v);
 
@@ -48,6 +51,60 @@ void assemble_unary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
     ins.type = type;
     ins.op = dst;
     insert_vectorASM_Ins(v, ins);
+}
+
+void assemble_binary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
+    ASM_Operand src1 = assemble_operand(tac_ins.src1);
+    ASM_Operand src2 = assemble_operand(tac_ins.src2);
+    ASM_Operand dst = assemble_operand(tac_ins.binary_dst);
+    ASM_Ins ins;
+    ins.type = type;
+    if(type == ASM_INS_BINARY_MUL) {
+        assemble_mov(src1, (ASM_Operand){OP_REG_R10}, v);
+        assemble_mov(src2, (ASM_Operand){OP_REG_R11}, v);
+        ins.src = (ASM_Operand){OP_REG_R10};
+        ins.dst = (ASM_Operand){OP_REG_R11};
+        insert_vectorASM_Ins(v, ins);
+        assemble_mov((ASM_Operand){OP_REG_R11}, dst, v);
+    } else if(type == ASM_INS_BINARY_LEFT_SHIFT || type == ASM_INS_BINARY_RIGHT_SHIFT) {
+        assemble_mov(src1, dst, v);
+        ins.dst = dst;
+        assemble_mov(src2, (ASM_Operand){OP_REG_CX}, v);
+        ins.src = (ASM_Operand){OP_REG_CX};
+        insert_vectorASM_Ins(v, ins);
+    } else {
+        assemble_mov(src1, dst, v);
+        ins.dst = dst;
+        if(src2.type == OP_PSEUDO && dst.type == OP_PSEUDO) {
+            assemble_mov(src2, (ASM_Operand){OP_REG_R10}, v);
+            ins.src = (ASM_Operand){OP_REG_R10};
+        } else {
+            ins.src = src2;
+        }
+        insert_vectorASM_Ins(v, ins);
+    }
+}
+
+void assemble_div(bool is_remainder, TAC_Ins tac_ins, VectorASM_Ins *v) {
+    ASM_Operand src1 = assemble_operand(tac_ins.src1);
+    ASM_Operand src2 = assemble_operand(tac_ins.src2);
+    ASM_Operand dst = assemble_operand(tac_ins.unary_dst);
+    assemble_mov(src1, (ASM_Operand){OP_REG_AX}, v);
+    insert_vectorASM_Ins(v, (ASM_Ins){ASM_INS_CDQ});
+    ASM_Ins ins;
+    ins.type = ASM_INS_UNARY_IDIV;
+    if(src2.type == OP_IMM) {
+        assemble_mov(src2, (ASM_Operand){OP_REG_R10}, v);
+        ins.op = (ASM_Operand){OP_REG_R10};
+    } else {
+        ins.op = src2;
+    }
+    insert_vectorASM_Ins(v, ins);
+    if(is_remainder) {
+        assemble_mov((ASM_Operand){OP_REG_DX}, dst, v);
+    } else {
+        assemble_mov((ASM_Operand){OP_REG_AX}, dst, v);
+    }
 }
 
 void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
@@ -65,6 +122,36 @@ void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
             break;
         case TAC_INS_UNARY_COMPLEMENT:
             assemble_unary(ASM_INS_UNARY_COMPLEMENT, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_ADD:
+            assemble_binary(ASM_INS_BINARY_ADD, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_SUB:
+            assemble_binary(ASM_INS_BINARY_SUB, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_MUL:
+            assemble_binary(ASM_INS_BINARY_MUL, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_BITWISE_AND:
+            assemble_binary(ASM_INS_BINARY_BITWISE_AND, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_BITWISE_OR:
+            assemble_binary(ASM_INS_BINARY_BITWISE_OR, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_BITWISE_XOR:
+            assemble_binary(ASM_INS_BINARY_BITWISE_XOR, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_LEFT_SHIFT:
+            assemble_binary(ASM_INS_BINARY_LEFT_SHIFT, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_RIGHT_SHIFT:
+            assemble_binary(ASM_INS_BINARY_RIGHT_SHIFT, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_DIV:
+            assemble_div(true, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_REMAINDER:
+            assemble_div(true, tac_ins, v);
             break;
     }
 }

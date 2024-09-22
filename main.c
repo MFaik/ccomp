@@ -19,6 +19,7 @@ int main(int argc, char **argv) {
     }
     if(argv[1][0] == 'l') {
         for(int i = 0;i < terms.size;i++) {
+            printf("%d ", i);
             pretty_print_term(terms.array[i]);
             printf("\n");
         }

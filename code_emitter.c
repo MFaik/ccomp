@@ -18,13 +18,30 @@ void write_operand(ASM_Operand operand) {
         case OP_REG_AX:
             fprintf(file, "%%eax");
             break;
+        case OP_REG_CX:
+            fprintf(file, "%%ecx");
+            break;
+        case OP_REG_DX:
+            fprintf(file, "%%edx");
+            break;
         case OP_REG_R10:
             fprintf(file, "%%r10d");
+            break;
+        case OP_REG_R11:
+            fprintf(file, "%%r11d");
             break;
         case OP_PSEUDO:
             fprintf(file, "%d(%%rbp)", (operand.pseudo+1)*-4);
             break;
     }
+}
+
+void write_instruction_binary(const char* ins, ASM_Ins instruction) {
+    fprintf_space(file, "%s ", ins);
+    write_operand(instruction.src);
+    fprintf(file, ", ");
+    write_operand(instruction.dst);
+    fprintf(file, "\n");
 }
 
 void write_instruction(ASM_Ins instruction) {
@@ -37,12 +54,8 @@ void write_instruction(ASM_Ins instruction) {
             fprintf_space(file, "popq %%rbp\n");
             fprintf_space(file, "ret\n");
             break;
-        case ASM_INS_MOV:
-            fprintf_space(file, "movl ");
-            write_operand(instruction.src);
-            fprintf(file, ", ");
-            write_operand(instruction.dst);
-            fprintf(file, "\n");
+        case ASM_INS_CDQ:
+            fprintf_space(file, "cdq\n");
             break;
         case ASM_INS_UNARY_NEG:
             fprintf_space(file, "negl ");
@@ -53,6 +66,38 @@ void write_instruction(ASM_Ins instruction) {
             fprintf_space(file, "notl ");
             write_operand(instruction.op);
             fprintf(file, "\n");
+            break;
+        case ASM_INS_UNARY_IDIV:
+            fprintf_space(file, "idiv ");
+            write_operand(instruction.op);
+            fprintf(file, "\n");
+            break;
+        case ASM_INS_MOV:
+            write_instruction_binary("movl", instruction);
+            break;
+        case ASM_INS_BINARY_ADD:
+            write_instruction_binary("addl", instruction);
+            break;
+        case ASM_INS_BINARY_SUB:
+            write_instruction_binary("subl", instruction);
+            break;
+        case ASM_INS_BINARY_BITWISE_AND:
+            write_instruction_binary("andl", instruction);
+            break;
+        case ASM_INS_BINARY_BITWISE_OR:
+            write_instruction_binary("orl", instruction);
+            break;
+        case ASM_INS_BINARY_BITWISE_XOR:
+            write_instruction_binary("xorl", instruction);
+            break;
+        case ASM_INS_BINARY_LEFT_SHIFT:
+            write_instruction_binary("shll", instruction);
+            break;
+        case ASM_INS_BINARY_RIGHT_SHIFT:
+            write_instruction_binary("shrl", instruction);
+            break;
+        case ASM_INS_BINARY_MUL:
+            write_instruction_binary("imull", instruction);
             break;
     }
 }

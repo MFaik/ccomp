@@ -3,8 +3,6 @@
 #include <stdio.h>
 #include <stdbool.h>
 
-#include "lexer.h"
-
 static VectorTerm terms;
 static size_t term_ptr = 0;
 static int error = 0;
@@ -22,49 +20,113 @@ void eat_term(TermType t) {
 #define eat_term_adv(t) eat_term_err(t)term_ptr++;
 #define eat_term_adv_ret(t, ret) eat_term_err_ret(t, ret)term_ptr++;
 
-AST_Expression parse_exp();
-AST_Expression* alloc_exp() {
+AST_Expression* alloc_exp(AST_Expression exp) {
     AST_Expression *ret = malloc(sizeof(AST_Expression));
-    *ret = parse_exp();
+    *ret = exp;
     return ret;
 }
 
-AST_Expression parse_exp_unary(TermType tt, ExpressionType et) {
+AST_Expression parse_factor();
+AST_Expression parse_unary_factor(AST_ExpressionType t) {
+    term_ptr++;
     AST_Expression ret;
-    eat_term_adv_ret(tt, ret);
-    ret.type = et;
-    ret.unary_exp = alloc_exp();
+    ret.type = t;
+    ret.unary_exp = alloc_exp(parse_factor());
     return ret;
 }
 
-AST_Expression parse_exp() {
+AST_Expression parse_exp(unsigned);
+AST_Expression parse_factor() {
     AST_Expression ret;
     switch(terms.array[term_ptr].type) {
         case TERM_CONSTANT:
-            eat_term_err_ret(TERM_CONSTANT, ret);
             ret.type = EXP_CONSTANT;
             ret.constant = terms.array[term_ptr].constant;
             term_ptr++;
             return ret;
+        case TERM_MINUS:
+            return parse_unary_factor(EXP_UNARY_NEG);
+        case TERM_COMPLEMENT:
+            return parse_unary_factor(EXP_UNARY_COMPLEMENT);
         case TERM_OPEN_PAR:
-            eat_term_adv_ret(TERM_OPEN_PAR, ret);
-            ret = parse_exp();
+            term_ptr++;
+            ret = parse_exp(0);if(error)return ret;
             eat_term_adv_ret(TERM_CLOSE_PAR, ret);
             return ret;
-        case TERM_COMPLEMENT:
-            return parse_exp_unary(TERM_COMPLEMENT, EXP_UNARY_COMPLEMENT);
-        case TERM_NEG:
-            return parse_exp_unary(TERM_NEG, EXP_UNARY_NEG);
         default:
-            error = 1;
+            printf("expected factor found %s", TermNames[terms.array[term_ptr].type]);
+            error = 2;
             return ret;
     }
+}
+
+unsigned binary_precedence(TermType t) {
+    switch(t) {
+        case TERM_PIPE:
+            return 6;
+        case TERM_HAT:
+            return 7;
+        case TERM_AMPERSAND:
+            return 8;
+        case TERM_LEFT_SHIFT:
+        case TERM_RIGHT_SHIFT:
+            return 11;
+        case TERM_PLUS:
+        case TERM_MINUS:
+            return 12;
+        case TERM_ASTERISK:
+        case TERM_PERCENT:
+        case TERM_FWD_SLASH:
+            return 13;
+        default:
+            return 0;
+    }
+}
+
+AST_ExpressionType binary_term_to_exp(TermType t) {
+    switch(t) {
+        case TERM_PLUS:
+            return EXP_BINARY_ADD;
+        case TERM_MINUS:
+            return EXP_BINARY_SUB;
+        case TERM_ASTERISK:
+            return EXP_BINARY_MUL;
+        case TERM_FWD_SLASH:
+            return EXP_BINARY_DIV;
+        case TERM_PERCENT:
+            return EXP_BINARY_REMAINDER;
+        case TERM_AMPERSAND:
+            return EXP_BINARY_BITWISE_AND;
+        case TERM_PIPE:
+            return EXP_BINARY_BITWISE_OR;
+        case TERM_HAT:
+            return EXP_BINARY_BITWISE_XOR;
+        case TERM_LEFT_SHIFT:
+            return EXP_BINARY_LEFT_SHIFT;
+        case TERM_RIGHT_SHIFT:
+            return EXP_BINARY_RIGHT_SHIFT;
+        default:
+            return -1;
+    }
+}
+
+AST_Expression parse_exp(unsigned min_prec) {
+    AST_Expression ret = parse_factor();if(error)return ret;
+    unsigned next_prec = binary_precedence(terms.array[term_ptr].type);
+    while(term_ptr < terms.size && next_prec > min_prec) {
+        ret.left_exp = alloc_exp(ret);
+        ret.type = binary_term_to_exp(terms.array[term_ptr].type);
+        term_ptr++;
+        ret.right_exp = alloc_exp(parse_exp(next_prec));if(error)return ret;
+        next_prec = binary_precedence(terms.array[term_ptr].type);
+    }
+    return ret;
 }
 
 AST_Statement parse_statement() {
     AST_Statement ret;
     eat_term_adv_ret(TERM_RETURN, ret);
-    ret.ret = parse_exp();if(error)return ret;
+    ret.ret = parse_exp(0);if(error)return ret;
     eat_term_adv_ret(TERM_SEMICOLON, ret);
     return ret;
 }
@@ -101,18 +163,62 @@ void printf_space(int space) {
         printf("    ");
 }
 
+void pretty_print_expression(AST_Expression exp);
+void pretty_print_unary_expression(AST_Expression exp, char op) {
+    printf("(");
+    printf("%c",op);
+    pretty_print_expression(*exp.unary_exp);
+    printf(")");
+}
+
+void pretty_print_binary_expression(AST_Expression exp, const char* op) {
+    printf("(");
+    pretty_print_expression(*exp.left_exp);
+    printf("%s",op);
+    pretty_print_expression(*exp.right_exp);
+    printf(")");
+}
+
 void pretty_print_expression(AST_Expression exp) {
     switch(exp.type) {
         case EXP_CONSTANT:
             printf("%d", exp.constant);
             break;
         case EXP_UNARY_COMPLEMENT:
-            printf("~");
-            pretty_print_expression(*exp.unary_exp);
+            pretty_print_unary_expression(exp, '~');
             break;
         case EXP_UNARY_NEG:
-            printf("-");
-            pretty_print_expression(*exp.unary_exp);
+            pretty_print_unary_expression(exp, '-');
+            break;
+        case EXP_BINARY_ADD:
+            pretty_print_binary_expression(exp, "+");
+            break;
+        case EXP_BINARY_SUB:
+            pretty_print_binary_expression(exp, "-");
+            break;
+        case EXP_BINARY_MUL:
+            pretty_print_binary_expression(exp, "*");
+            break;
+        case EXP_BINARY_DIV:
+            pretty_print_binary_expression(exp, "/");
+            break;
+        case EXP_BINARY_REMAINDER:
+            pretty_print_binary_expression(exp, "%");
+            break;
+        case EXP_BINARY_BITWISE_AND:
+            pretty_print_binary_expression(exp, "&");
+            break;
+        case EXP_BINARY_BITWISE_OR:
+            pretty_print_binary_expression(exp, "|");
+            break;
+        case EXP_BINARY_BITWISE_XOR:
+            pretty_print_binary_expression(exp, "^");
+            break;
+        case EXP_BINARY_LEFT_SHIFT:
+            pretty_print_binary_expression(exp, "<<");
+            break;
+        case EXP_BINARY_RIGHT_SHIFT:
+            pretty_print_binary_expression(exp, ">>");
             break;
     }
 }

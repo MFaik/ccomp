@@ -12,6 +12,16 @@ typedef enum {
     TAC_INS_RETURN,
     TAC_INS_UNARY_NEG,
     TAC_INS_UNARY_COMPLEMENT,
+    TAC_INS_BINARY_ADD,
+    TAC_INS_BINARY_SUB,
+    TAC_INS_BINARY_MUL,
+    TAC_INS_BINARY_DIV,
+    TAC_INS_BINARY_REMAINDER,
+    TAC_INS_BINARY_BITWISE_AND,
+    TAC_INS_BINARY_BITWISE_OR,
+    TAC_INS_BINARY_BITWISE_XOR,
+    TAC_INS_BINARY_LEFT_SHIFT,
+    TAC_INS_BINARY_RIGHT_SHIFT,
 } TAC_Ins_Type;
 
 typedef struct {
@@ -29,7 +39,13 @@ typedef struct {
         struct {
             TAC_Val src;
             //dst must be var
-            TAC_Val dst;
+            TAC_Val unary_dst;
+        };
+        struct {
+            TAC_Val src1;
+            TAC_Val src2;
+            //dst must be var
+            TAC_Val binary_dst;
         };
     };
 } TAC_Ins;

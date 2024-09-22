@@ -7,7 +7,10 @@
 typedef enum{
     OP_IMM,
     OP_REG_AX,
+    OP_REG_DX,
+    OP_REG_CX,
     OP_REG_R10,
+    OP_REG_R11,
     OP_PSEUDO,
 } OperandType;
 typedef struct {
@@ -21,8 +24,18 @@ typedef struct {
 typedef enum{
     ASM_INS_RET,
     ASM_INS_MOV,
+    ASM_INS_CDQ,
     ASM_INS_UNARY_NEG,
     ASM_INS_UNARY_COMPLEMENT,
+    ASM_INS_UNARY_IDIV,
+    ASM_INS_BINARY_ADD,
+    ASM_INS_BINARY_SUB,
+    ASM_INS_BINARY_MUL,
+    ASM_INS_BINARY_BITWISE_AND,
+    ASM_INS_BINARY_BITWISE_OR,
+    ASM_INS_BINARY_BITWISE_XOR,
+    ASM_INS_BINARY_LEFT_SHIFT,
+    ASM_INS_BINARY_RIGHT_SHIFT,
     ASM_INS_ALLOCATE,
 } ASM_InsType;
 typedef struct {

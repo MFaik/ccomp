@@ -11,10 +11,20 @@ const char* TermNames[] = {
     "int",
     "void",
     "return",
-    "negate",
     "complement",
     "decrement",
     "increment",
+    "plus",
+    "minus",
+    "asterisk",
+    "forward-slash",
+    "percent",
+    "ampersand",
+    "pipe",
+    "hat",
+    "left-shift",
+    "right-shift",
+    "end of file",
 };
 
 #include <ctype.h>
@@ -45,14 +55,23 @@ struct {
     //two char symbols
     {TERM_DECREMENT, "--", 2},
     {TERM_INCREMENT, "++", 2},
+    {TERM_LEFT_SHIFT, "<<", 2},
+    {TERM_RIGHT_SHIFT, ">>", 2},
     //one char symbols
     {TERM_OPEN_PAR, "(", 1},
     {TERM_CLOSE_PAR, ")", 1},
     {TERM_OPEN_BRACE, "{", 1},
     {TERM_CLOSE_BRACE, "}", 1},
     {TERM_SEMICOLON, ";", 1},
-    {TERM_NEG, "-", 1},
     {TERM_COMPLEMENT, "~", 1},
+    {TERM_PLUS, "+", 1},
+    {TERM_MINUS, "-", 1},
+    {TERM_ASTERISK, "*", 1},
+    {TERM_FWD_SLASH, "/", 1},
+    {TERM_PERCENT, "%", 1},
+    {TERM_AMPERSAND, "&", 1},
+    {TERM_PIPE, "|", 1},
+    {TERM_HAT, "^", 1},
 };
 
 void eat_identifier(VectorTerm *v) {
@@ -146,6 +165,7 @@ VectorTerm lex(char* file) {
     if(error) {
         ret.size = 0;
     }
+    insert_vectorTerm(&ret, (Term){TERM_EOF});
     return ret;
 }
 
