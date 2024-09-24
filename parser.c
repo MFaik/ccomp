@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "lexer.h"
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -48,6 +49,8 @@ AST_Expression parse_factor() {
             return parse_unary_factor(EXP_UNARY_NEG);
         case TERM_COMPLEMENT:
             return parse_unary_factor(EXP_UNARY_COMPLEMENT);
+        case TERM_LOGICAL_NOT:
+            return parse_unary_factor(EXP_UNARY_LOGICAL_NOT);
         case TERM_OPEN_PAR:
             term_ptr++;
             ret = parse_exp(0);if(error)return ret;
@@ -62,21 +65,33 @@ AST_Expression parse_factor() {
 
 unsigned binary_precedence(TermType t) {
     switch(t) {
-        case TERM_PIPE:
+        case TERM_LOGICAL_OR:
+            return 4;
+        case TERM_LOGICAL_AND:
+            return 5;
+        case TERM_BITWISE_OR:
             return 6;
-        case TERM_HAT:
+        case TERM_BITWISE_XOR:
             return 7;
-        case TERM_AMPERSAND:
+        case TERM_BITWISE_AND:
             return 8;
+        case TERM_EQUAL_TO:
+        case TERM_NOT_EQUAL:
+            return 9;
+        case TERM_LESS_THAN:
+        case TERM_GREATER_THAN:
+        case TERM_LESS_OR_EQUAL:
+        case TERM_GREATER_OR_EQUAL:
+            return 10;
         case TERM_LEFT_SHIFT:
         case TERM_RIGHT_SHIFT:
             return 11;
         case TERM_PLUS:
         case TERM_MINUS:
             return 12;
-        case TERM_ASTERISK:
-        case TERM_PERCENT:
-        case TERM_FWD_SLASH:
+        case TERM_MUL:
+        case TERM_REMAINDER:
+        case TERM_DIV:
             return 13;
         default:
             return 0;
@@ -89,22 +104,38 @@ AST_ExpressionType binary_term_to_exp(TermType t) {
             return EXP_BINARY_ADD;
         case TERM_MINUS:
             return EXP_BINARY_SUB;
-        case TERM_ASTERISK:
+        case TERM_MUL:
             return EXP_BINARY_MUL;
-        case TERM_FWD_SLASH:
+        case TERM_DIV:
             return EXP_BINARY_DIV;
-        case TERM_PERCENT:
+        case TERM_REMAINDER:
             return EXP_BINARY_REMAINDER;
-        case TERM_AMPERSAND:
+        case TERM_BITWISE_AND:
             return EXP_BINARY_BITWISE_AND;
-        case TERM_PIPE:
+        case TERM_BITWISE_OR:
             return EXP_BINARY_BITWISE_OR;
-        case TERM_HAT:
+        case TERM_BITWISE_XOR:
             return EXP_BINARY_BITWISE_XOR;
         case TERM_LEFT_SHIFT:
             return EXP_BINARY_LEFT_SHIFT;
         case TERM_RIGHT_SHIFT:
             return EXP_BINARY_RIGHT_SHIFT;
+        case TERM_LOGICAL_AND:
+            return EXP_BINARY_LOGICAL_AND;
+        case TERM_LOGICAL_OR:
+            return EXP_BINARY_LOGICAL_OR;
+        case TERM_EQUAL_TO:
+            return EXP_EQUAL;
+        case TERM_NOT_EQUAL:
+            return EXP_NOT_EQUAL;
+        case TERM_LESS_THAN:
+            return EXP_LESS_THAN;
+        case TERM_GREATER_THAN:
+            return EXP_GREATER_THAN;
+        case TERM_LESS_OR_EQUAL:
+            return EXP_GREATER_OR_EQUAL;
+        case TERM_GREATER_OR_EQUAL:
+            return EXP_GREATER_OR_EQUAL;
         default:
             return -1;
     }
@@ -190,6 +221,9 @@ void pretty_print_expression(AST_Expression exp) {
         case EXP_UNARY_NEG:
             pretty_print_unary_expression(exp, '-');
             break;
+        case EXP_UNARY_LOGICAL_NOT:
+            pretty_print_unary_expression(exp, '!');
+            break;
         case EXP_BINARY_ADD:
             pretty_print_binary_expression(exp, "+");
             break;
@@ -219,6 +253,30 @@ void pretty_print_expression(AST_Expression exp) {
             break;
         case EXP_BINARY_RIGHT_SHIFT:
             pretty_print_binary_expression(exp, ">>");
+            break;
+        case EXP_BINARY_LOGICAL_AND:
+            pretty_print_binary_expression(exp, "&&");
+            break;
+        case EXP_BINARY_LOGICAL_OR:
+            pretty_print_binary_expression(exp, "||");
+            break;
+        case EXP_EQUAL:
+            pretty_print_binary_expression(exp, "==");
+            break;
+        case EXP_NOT_EQUAL:
+            pretty_print_binary_expression(exp, "!=");
+            break;
+        case EXP_LESS_THAN:
+            pretty_print_binary_expression(exp, "<");
+            break;
+        case EXP_GREATER_THAN:
+            pretty_print_binary_expression(exp, ">");
+            break;
+        case EXP_LESS_OR_EQUAL:
+            pretty_print_binary_expression(exp, "<=");
+            break;
+        case EXP_GREATER_OR_EQUAL:
+            pretty_print_binary_expression(exp, ">=");
             break;
     }
 }

@@ -3,6 +3,7 @@
 vector_body(TAC_Ins);
 
 #include <stdio.h>
+#include <stdbool.h>
 
 static unsigned counter = 0;
 
@@ -33,6 +34,30 @@ TAC_Val tac_binary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
     return ins.binary_dst;
 }
 
+TAC_Val tac_binary_short_circuit(AST_Expression exp, TAC_Ins_Type type, 
+        bool jump_on_true, VectorTAC_Ins *v) {
+    TAC_Ins ins;
+    ins.type = type;
+    ins.src1 = tac_expression(*exp.left_exp, v);
+
+    TAC_Ins jmp;
+    jmp.type = jump_on_true ? TAC_INS_JMP_IF_NOT_ZERO : TAC_INS_JMP_IF_ZERO;
+    jmp.condition = ins.src1;
+    jmp.target = generate_new_var();
+    insert_vectorTAC_Ins(v, jmp);
+
+    ins.src2 = tac_expression(*exp.right_exp, v);
+
+    TAC_Ins label;
+    label.type = TAC_INS_LABEL;
+    label.label = jmp.target;
+    insert_vectorTAC_Ins(v, label);
+
+    ins.binary_dst = generate_new_var();
+    insert_vectorTAC_Ins(v, ins);
+    return ins.binary_dst;
+}
+
 TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
     TAC_Val ret;
     switch(exp.type) {
@@ -45,6 +70,8 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
             return tac_unary(exp, TAC_INS_UNARY_NEG, v);
         case EXP_UNARY_COMPLEMENT:
             return tac_unary(exp, TAC_INS_UNARY_COMPLEMENT, v);
+        case EXP_UNARY_LOGICAL_NOT:
+            return tac_unary(exp, TAC_INS_UNARY_LOGICAL_NOT, v);
         //binary expressions
         case EXP_BINARY_ADD:
             return tac_binary(exp, TAC_INS_BINARY_ADD, v);
