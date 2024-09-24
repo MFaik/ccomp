@@ -22,6 +22,14 @@ typedef struct {
 } ASM_Operand;
 
 typedef enum{
+    ASM_E,
+    ASM_NE,
+    ASM_G,
+    ASM_GE,
+    ASM_L,
+    ASM_LE,
+} ASM_Cond;
+typedef enum{
     ASM_INS_RET,
     ASM_INS_MOV,
     ASM_INS_CDQ,
@@ -37,6 +45,11 @@ typedef enum{
     ASM_INS_BINARY_LEFT_SHIFT,
     ASM_INS_BINARY_RIGHT_SHIFT,
     ASM_INS_ALLOCATE,
+    ASM_INS_CMP,
+    ASM_INS_JMP,
+    ASM_INS_JMPCC,
+    ASM_INS_SETCC,
+    ASM_INS_LABEL,
 } ASM_InsType;
 typedef struct {
     ASM_InsType type;
@@ -44,6 +57,14 @@ typedef struct {
         struct {
             ASM_Operand src;
             ASM_Operand dst;
+        };
+        struct {
+            ASM_Cond cond;
+            unsigned label;
+        };
+        struct {
+            ASM_Cond PADDING;
+            ASM_Operand set_op;
         };
         ASM_Operand op;
         unsigned alloc;

@@ -5,12 +5,27 @@ vector_body(TAC_Ins);
 #include <stdio.h>
 #include <stdbool.h>
 
-static unsigned counter = 0;
+static unsigned var_counter = 0;
+static unsigned label_counter = 0;
+
+TAC_Val generate_constant(long l) {
+    TAC_Val ret;
+    ret.type = TAC_VAL_CONSTANT;
+    ret.constant = l;
+    return ret;
+}
 
 TAC_Val generate_new_var() {
     TAC_Val ret;
     ret.type = TAC_VAL_VAR;
-    ret.var = counter++;
+    ret.var = var_counter++;
+    return ret;
+}
+
+TAC_Val generate_new_label() {
+    TAC_Val ret;
+    ret.type = TAC_VAL_VAR;
+    ret.var = label_counter++;
     return ret;
 }
 
@@ -34,28 +49,48 @@ TAC_Val tac_binary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
     return ins.binary_dst;
 }
 
-TAC_Val tac_binary_short_circuit(AST_Expression exp, TAC_Ins_Type type, 
-        bool jump_on_true, VectorTAC_Ins *v) {
-    TAC_Ins ins;
-    ins.type = type;
-    ins.src1 = tac_expression(*exp.left_exp, v);
+TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTAC_Ins *v) {
+    TAC_Val skip_label = generate_new_label();
+    TAC_Val end_label = generate_new_label();
+    TAC_Val ret = generate_new_var();
+
+    TAC_Val left = tac_expression(*exp.left_exp, v);
 
     TAC_Ins jmp;
     jmp.type = jump_on_true ? TAC_INS_JMP_IF_NOT_ZERO : TAC_INS_JMP_IF_ZERO;
-    jmp.condition = ins.src1;
-    jmp.target = generate_new_var();
+    jmp.condition = left;
+    jmp.target = skip_label;
     insert_vectorTAC_Ins(v, jmp);
 
-    ins.src2 = tac_expression(*exp.right_exp, v);
+    TAC_Val right = tac_expression(*exp.right_exp, v);
+
+    jmp.condition = right;
+    insert_vectorTAC_Ins(v, jmp);
+
+    TAC_Ins copy;
+    copy.type = TAC_INS_COPY;
+    copy.src = generate_constant(jump_on_true);
+    copy.unary_dst = ret;
+    insert_vectorTAC_Ins(v, copy);
+
+    jmp.type = TAC_INS_JMP;
+    jmp.target = end_label;
+    insert_vectorTAC_Ins(v, jmp);
 
     TAC_Ins label;
     label.type = TAC_INS_LABEL;
-    label.label = jmp.target;
+    label.label = skip_label;
     insert_vectorTAC_Ins(v, label);
 
-    ins.binary_dst = generate_new_var();
-    insert_vectorTAC_Ins(v, ins);
-    return ins.binary_dst;
+    copy.type = TAC_INS_COPY;
+    copy.src = generate_constant(!jump_on_true);
+    copy.unary_dst = ret;
+    insert_vectorTAC_Ins(v, copy);
+    
+    label.label = end_label;
+    insert_vectorTAC_Ins(v, label);
+
+    return ret;
 }
 
 TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
@@ -93,11 +128,26 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
             return tac_binary(exp, TAC_INS_BINARY_LEFT_SHIFT, v);
         case EXP_BINARY_RIGHT_SHIFT:
             return tac_binary(exp, TAC_INS_BINARY_LEFT_SHIFT, v);
+        case EXP_BINARY_LOGICAL_AND:
+            return tac_binary_short_circuit(exp, 0, v);
+        case EXP_BINARY_LOGICAL_OR:
+            return tac_binary_short_circuit(exp, 1, v);
+        case EXP_EQUAL:
+            return tac_binary(exp, TAC_INS_BINARY_EQUAL, v);
+        case EXP_NOT_EQUAL:
+            return tac_binary(exp, TAC_INS_BINARY_NOT_EQUAL, v);
+        case EXP_LESS_THAN:
+            return tac_binary(exp, TAC_INS_BINARY_LESS_THAN, v);
+        case EXP_GREATER_THAN:
+            return tac_binary(exp, TAC_INS_BINARY_GREATER_THAN, v);
+        case EXP_LESS_OR_EQUAL:
+            return tac_binary(exp, TAC_INS_BINARY_LESS_OR_EQUAL, v);
+        case EXP_GREATER_OR_EQUAL:
+            return tac_binary(exp, TAC_INS_BINARY_GREATER_OR_EQUAL, v);
     }
 }
 
 TAC_Function tac_function(AST_Function function) {
-    counter = 0;
     TAC_Function ret;
     ret.name = function.name.str;
     init_vectorTAC_Ins(&ret.instructions, 2);
@@ -105,11 +155,14 @@ TAC_Function tac_function(AST_Function function) {
     ret_ins.type = TAC_INS_RETURN;
     ret_ins.ret = tac_expression(function.statement.ret, &ret.instructions);
     insert_vectorTAC_Ins(&ret.instructions, ret_ins);
-    ret.var_cnt = counter;
+    ret.var_cnt = generate_new_var().var;
     return ret;
 }
 
 TAC_Program emit_tacky(AST_Program ast_program) {
+    var_counter = 0;
+    label_counter = 0;
+
     TAC_Program ret;
     ret.function = tac_function(ast_program.function);
     return ret;
@@ -124,6 +177,13 @@ void pretty_print_val(TAC_Val val) {
             printf("$%d", val.var);
             break;
     }
+}
+
+void pretty_print_unary(TAC_Ins ins, const char* op) {
+    pretty_print_val(ins.unary_dst);
+    printf(" = %s", op);
+    pretty_print_val(ins.src);
+    printf("\n");
 }
 
 void pretty_print_binary(TAC_Ins ins, const char* op) {
@@ -146,16 +206,16 @@ void pretty_print_tacky_program(TAC_Program program) {
                 printf("\n");
                 break;
             case TAC_INS_UNARY_NEG:
-                pretty_print_val(ins.unary_dst);
-                printf(" = -");
-                pretty_print_val(ins.src);
-                printf("\n");
+                pretty_print_unary(ins, "-");
                 break;
             case TAC_INS_UNARY_COMPLEMENT:
-                pretty_print_val(ins.unary_dst);
-                printf(" = ~");
-                pretty_print_val(ins.src);
-                printf("\n");
+                pretty_print_unary(ins, "~");
+                break;
+            case TAC_INS_UNARY_LOGICAL_NOT:
+                pretty_print_unary(ins, "!");
+                break;
+            case TAC_INS_COPY:
+                pretty_print_unary(ins, "");
                 break;
             case TAC_INS_BINARY_ADD:
                 pretty_print_binary(ins, "+");
@@ -186,6 +246,48 @@ void pretty_print_tacky_program(TAC_Program program) {
                 break;
             case TAC_INS_BINARY_RIGHT_SHIFT:
                 pretty_print_binary(ins, ">>");
+                break;
+            case TAC_INS_BINARY_EQUAL:
+                pretty_print_binary(ins, "==");
+                break;
+            case TAC_INS_BINARY_NOT_EQUAL:
+                pretty_print_binary(ins, "!=");
+                break;
+            case TAC_INS_BINARY_GREATER_THAN:
+                pretty_print_binary(ins, ">");
+                break;
+            case TAC_INS_BINARY_LESS_THAN:
+                pretty_print_binary(ins, "<");
+                break;
+            case TAC_INS_BINARY_GREATER_OR_EQUAL:
+                pretty_print_binary(ins, ">=");
+                break;
+            case TAC_INS_BINARY_LESS_OR_EQUAL:
+                pretty_print_binary(ins, "<=");
+                break;
+            case TAC_INS_JMP:
+                printf("jmp ");
+                pretty_print_val(ins.target);
+                printf("\n");
+                break;
+            case TAC_INS_JMP_IF_ZERO:
+                printf("if ");
+                pretty_print_val(ins.condition);
+                printf(" == 0 jmp ");
+                pretty_print_val(ins.target);
+                printf("\n");
+                break;
+            case TAC_INS_JMP_IF_NOT_ZERO:
+                printf("if ");
+                pretty_print_val(ins.condition);
+                printf(" != 0 jmp ");
+                pretty_print_val(ins.target);
+                printf("\n");
+                break;
+            case TAC_INS_LABEL:
+                printf("label ");
+                pretty_print_val(ins.label);
+                printf("\n");
                 break;
         }
     }

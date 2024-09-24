@@ -110,13 +110,14 @@ void assemble_div(bool is_remainder, TAC_Ins tac_ins, VectorASM_Ins *v) {
 void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
     ASM_Ins asm_ins;
     switch(tac_ins.type) {
-        case TAC_INS_RETURN:{
-            ASM_Operand src = assemble_operand(tac_ins.ret);
-            ASM_Operand dst = (ASM_Operand){OP_REG_AX};
-            assemble_mov(src, dst, v);
-            insert_vectorASM_Ins(v, (ASM_Ins){ASM_INS_RET});
-            break;
-        }
+        case TAC_INS_RETURN:
+            {
+                ASM_Operand src = assemble_operand(tac_ins.ret);
+                ASM_Operand dst = (ASM_Operand){OP_REG_AX};
+                assemble_mov(src, dst, v);
+                insert_vectorASM_Ins(v, (ASM_Ins){ASM_INS_RET});
+                break;
+            }
         case TAC_INS_UNARY_NEG:
             assemble_unary(ASM_INS_UNARY_NEG, tac_ins, v);
             break;
@@ -153,6 +154,16 @@ void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
         case TAC_INS_BINARY_REMAINDER:
             assemble_div(true, tac_ins, v);
             break;
+        case TAC_INS_JMP:
+        {
+            ASM_Ins jmp;
+            jmp.type = ASM_INS_JMP;
+            jmp.label = tac_ins.label.var;
+            insert_vectorASM_Ins(v, jmp);
+            break;
+        }
+        case TAC_INS_JMP_IF_ZERO:
+            assemble_jump();
     }
 }
 
