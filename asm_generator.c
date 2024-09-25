@@ -7,7 +7,7 @@
 
 vector_body(ASM_Ins);
 
-ASM_Operand assemble_imm(int constant) {
+ASM_Operand assemble_constant(int constant) {
     return (ASM_Operand){OP_IMM, constant};
 }
 
@@ -15,7 +15,7 @@ ASM_Operand assemble_operand(TAC_Val val) {
     ASM_Operand ret;
     switch(val.type) {
         case TAC_VAL_CONSTANT:
-            return assemble_imm(val.constant);
+            return assemble_constant(val.constant);
         case TAC_VAL_VAR:
             ret.type = OP_PSEUDO;
             ret.pseudo = val.var;
@@ -53,6 +53,51 @@ void assemble_unary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
     insert_vectorASM_Ins(v, ins);
 }
 
+void assemble_setcc(ASM_Cond cond, ASM_Operand dst, VectorASM_Ins *v) {
+    ASM_Ins mov;
+    mov.type = ASM_INS_MOV;
+    mov.src = assemble_constant(0);
+    mov.dst = dst;
+    insert_vectorASM_Ins(v, mov);
+
+    ASM_Ins set;
+    set.type = ASM_INS_SETCC;
+    set.cond = cond;
+    set.set_op = dst;
+    insert_vectorASM_Ins(v, set);
+}
+
+ASM_Operand MMtoRM(ASM_Operand a, ASM_Operand b, VectorASM_Ins *v) {
+    if(a.type == OP_PSEUDO && b.type == OP_PSEUDO) {
+        assemble_mov(a, (ASM_Operand){OP_REG_R10}, v);
+        return (ASM_Operand){OP_REG_R10};
+    } else {
+        return a;
+    }
+}
+
+ASM_Operand IItoRI(ASM_Operand a, ASM_Operand b, VectorASM_Ins *v) {
+    if(a.type == OP_IMM && b.type == OP_IMM) {
+        assemble_mov(a, (ASM_Operand){OP_REG_R10}, v);
+        return (ASM_Operand){OP_REG_R10};
+    } else {
+        return a;
+    }
+}
+
+void assemble_unary_logical_not(TAC_Ins tac_ins, VectorASM_Ins *v) {
+    ASM_Operand src = assemble_operand(tac_ins.src);
+    ASM_Operand dst = assemble_operand(tac_ins.unary_dst);
+
+    ASM_Ins cmp;
+    cmp.type = ASM_INS_CMP;
+    cmp.src = assemble_constant(0);
+    cmp.dst = IItoRI(src, cmp.src, v);
+    insert_vectorASM_Ins(v, cmp);
+
+    assemble_setcc(ASM_COND_E, dst, v);
+}
+
 void assemble_binary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
     ASM_Operand src1 = assemble_operand(tac_ins.src1);
     ASM_Operand src2 = assemble_operand(tac_ins.src2);
@@ -75,12 +120,7 @@ void assemble_binary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
     } else {
         assemble_mov(src1, dst, v);
         ins.dst = dst;
-        if(src2.type == OP_PSEUDO && dst.type == OP_PSEUDO) {
-            assemble_mov(src2, (ASM_Operand){OP_REG_R10}, v);
-            ins.src = (ASM_Operand){OP_REG_R10};
-        } else {
-            ins.src = src2;
-        }
+        ins.src = MMtoRM(src2, dst, v);
         insert_vectorASM_Ins(v, ins);
     }
 }
@@ -107,22 +147,52 @@ void assemble_div(bool is_remainder, TAC_Ins tac_ins, VectorASM_Ins *v) {
     }
 }
 
+void assemble_jmp(bool jump_on_true, TAC_Ins tac_ins, VectorASM_Ins *v) {
+    ASM_Ins cmp;
+    cmp.type = ASM_INS_CMP;
+    cmp.src = assemble_constant(0);
+    cmp.dst = IItoRI(assemble_operand(tac_ins.condition), cmp.src, v);
+    insert_vectorASM_Ins(v, cmp);
+
+    ASM_Ins jmp;
+    jmp.type = ASM_INS_JMPCC;
+    jmp.cond = jump_on_true ? ASM_COND_NE : ASM_COND_E;
+    jmp.label = tac_ins.target.var;
+    insert_vectorASM_Ins(v, jmp);
+}
+
+void assemble_comp(ASM_Cond cond, TAC_Ins tac_ins, VectorASM_Ins *v) {
+    ASM_Operand src = assemble_operand(tac_ins.src);
+    ASM_Operand dst = assemble_operand(tac_ins.unary_dst);
+
+    ASM_Ins cmp;
+    cmp.type = ASM_INS_CMP;
+    cmp.src = MMtoRM(src, dst, v);
+    cmp.dst = IItoRI(dst, src, v);
+    insert_vectorASM_Ins(v, cmp);
+    
+    assemble_setcc(cond, dst, v);
+}
+
 void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
     ASM_Ins asm_ins;
     switch(tac_ins.type) {
         case TAC_INS_RETURN:
-            {
-                ASM_Operand src = assemble_operand(tac_ins.ret);
-                ASM_Operand dst = (ASM_Operand){OP_REG_AX};
-                assemble_mov(src, dst, v);
-                insert_vectorASM_Ins(v, (ASM_Ins){ASM_INS_RET});
-                break;
-            }
+        {
+            ASM_Operand src = assemble_operand(tac_ins.ret);
+            ASM_Operand dst = (ASM_Operand){OP_REG_AX};
+            assemble_mov(src, dst, v);
+            insert_vectorASM_Ins(v, (ASM_Ins){ASM_INS_RET});
+            break;
+        }
         case TAC_INS_UNARY_NEG:
             assemble_unary(ASM_INS_UNARY_NEG, tac_ins, v);
             break;
         case TAC_INS_UNARY_COMPLEMENT:
             assemble_unary(ASM_INS_UNARY_COMPLEMENT, tac_ins, v);
+            break;
+        case TAC_INS_UNARY_LOGICAL_NOT:
+            assemble_unary_logical_not(tac_ins, v);
             break;
         case TAC_INS_BINARY_ADD:
             assemble_binary(ASM_INS_BINARY_ADD, tac_ins, v);
@@ -158,12 +228,51 @@ void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
         {
             ASM_Ins jmp;
             jmp.type = ASM_INS_JMP;
-            jmp.label = tac_ins.label.var;
+            jmp.label = tac_ins.target.var;
             insert_vectorASM_Ins(v, jmp);
             break;
         }
         case TAC_INS_JMP_IF_ZERO:
-            assemble_jump();
+            assemble_jmp(false, tac_ins, v);
+            break;
+        case TAC_INS_JMP_IF_NOT_ZERO:
+            assemble_jmp(true, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_EQUAL:
+            assemble_comp(ASM_COND_E, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_NOT_EQUAL:
+            assemble_comp(ASM_COND_NE, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_GREATER_THAN:
+            assemble_comp(ASM_COND_G, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_LESS_THAN:
+            assemble_comp(ASM_COND_L, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_GREATER_OR_EQUAL:
+            assemble_comp(ASM_COND_GE, tac_ins, v);
+            break;
+        case TAC_INS_BINARY_LESS_OR_EQUAL:
+            assemble_comp(ASM_COND_LE, tac_ins, v);
+            break;
+        case TAC_INS_COPY:
+        {
+            ASM_Ins mov;
+            mov.type = ASM_INS_MOV;
+            mov.src = assemble_operand(tac_ins.src);
+            mov.dst = assemble_operand(tac_ins.unary_dst);
+            insert_vectorASM_Ins(v, mov);
+            break;
+        }
+        case TAC_INS_LABEL:
+        {
+            ASM_Ins label;
+            label.type = ASM_INS_LABEL;
+            label.label = tac_ins.label.var;
+            insert_vectorASM_Ins(v, label);
+            break;
+        }
     }
 }
 

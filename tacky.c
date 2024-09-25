@@ -69,7 +69,7 @@ TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTA
 
     TAC_Ins copy;
     copy.type = TAC_INS_COPY;
-    copy.src = generate_constant(jump_on_true);
+    copy.src = generate_constant(!jump_on_true);
     copy.unary_dst = ret;
     insert_vectorTAC_Ins(v, copy);
 
@@ -83,7 +83,7 @@ TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTA
     insert_vectorTAC_Ins(v, label);
 
     copy.type = TAC_INS_COPY;
-    copy.src = generate_constant(!jump_on_true);
+    copy.src = generate_constant(jump_on_true);
     copy.unary_dst = ret;
     insert_vectorTAC_Ins(v, copy);
     

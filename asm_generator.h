@@ -22,12 +22,12 @@ typedef struct {
 } ASM_Operand;
 
 typedef enum{
-    ASM_E,
-    ASM_NE,
-    ASM_G,
-    ASM_GE,
-    ASM_L,
-    ASM_LE,
+    ASM_COND_E,
+    ASM_COND_NE,
+    ASM_COND_G,
+    ASM_COND_GE,
+    ASM_COND_L,
+    ASM_COND_LE,
 } ASM_Cond;
 typedef enum{
     ASM_INS_RET,
