@@ -33,6 +33,7 @@ const char* TermNames[] = {
     "greater than",
     "less or equal",
     "greater or equal",
+    "assign",
     "end of file",
 };
 
@@ -90,6 +91,7 @@ struct {
     {TERM_LOGICAL_NOT, "!", 1},
     {TERM_LESS_THAN, "<", 1},
     {TERM_GREATER_THAN, ">", 1},
+    {TERM_ASSIGN, "=", 1},
 };
 
 void eat_identifier(VectorTerm *v) {

@@ -35,6 +35,7 @@ typedef enum {
     TERM_GREATER_THAN,
     TERM_LESS_OR_EQUAL,
     TERM_GREATER_OR_EQUAL,
+    TERM_ASSIGN,
     TERM_EOF,
 } TermType;
 
