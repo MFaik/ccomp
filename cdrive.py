@@ -8,18 +8,13 @@ parser = argparse.ArgumentParser(prog='cdrive', description='Compiler Driver')
 parser.add_argument('ccomp', help='The compiler')
 parser.add_argument('filename', help='The file to be compiled')
 parser.add_argument('--lex', action='store_true',
-                    help='Directs the compiler to run the lexer, but stop\
-                            before parsing')
+                    help='Runs the compiler, but stops it right after lexer')
 parser.add_argument('--parse', action='store_true',
-                    help='Directs the compiler to run the lexer and parser, but\
-                            stop before tacky generation')
+                    help='Runs the compiler, but stops it right after parser')
+parser.add_argument('--validate', action='store_true',
+                    help='Runs the compiler, but stops it right after semantic analyzer')
 parser.add_argument('--tacky', action='store_true',
-                    help='Directs the compiler to run the lexer parser and tacky\
-                            generation, but stop before assembly generation')
-parser.add_argument('--codegen', action='store_true',
-                    help='Directs the compiler to perform lexing, parsing, tacky\
-                            generation and assembly generation, but stop before\
-                            code emission')
+                    help='Runs the compiler, but stops it right after tacky generation')
 parser.add_argument('--output', '-o', help='Output file')
 
 args = parser.parse_args()
@@ -31,6 +26,8 @@ if(args.lex):
     option = 'l'
 elif(args.parse):
     option = 'p'
+elif(args.validate):
+    option = 's'
 elif(args.tacky):
     option = 't'
 elif(args.codegen):

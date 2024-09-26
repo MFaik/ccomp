@@ -29,6 +29,15 @@ TAC_Val generate_new_label() {
     return ret;
 }
 
+TAC_Val tac_copy(TAC_Val src, TAC_Val dst, VectorTAC_Ins *v) {
+    TAC_Ins copy;
+    copy.type = TAC_INS_COPY;
+    copy.src = src;
+    copy.unary_dst = dst;
+    insert_vectorTAC_Ins(v, copy);
+    return dst;
+}
+
 TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v);
 TAC_Val tac_unary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
     TAC_Ins ins;
@@ -67,11 +76,7 @@ TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTA
     jmp.condition = right;
     insert_vectorTAC_Ins(v, jmp);
 
-    TAC_Ins copy;
-    copy.type = TAC_INS_COPY;
-    copy.src = generate_constant(!jump_on_true);
-    copy.unary_dst = ret;
-    insert_vectorTAC_Ins(v, copy);
+    tac_copy(generate_constant(!jump_on_true), ret, v);
 
     jmp.type = TAC_INS_JMP;
     jmp.target = end_label;
@@ -82,15 +87,37 @@ TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTA
     label.label = skip_label;
     insert_vectorTAC_Ins(v, label);
 
-    copy.type = TAC_INS_COPY;
-    copy.src = generate_constant(jump_on_true);
-    copy.unary_dst = ret;
-    insert_vectorTAC_Ins(v, copy);
+    tac_copy(generate_constant(jump_on_true), ret, v);
     
     label.label = end_label;
     insert_vectorTAC_Ins(v, label);
 
     return ret;
+}
+
+TAC_Val tac_binary_assign(TAC_Ins_Type type, AST_Expression exp, VectorTAC_Ins *v) {
+    tac_binary(exp, type, v);
+    return tac_copy(tac_binary(exp, TAC_INS_BINARY_ADD, v), 
+            tac_expression(*exp.left_exp, v) ,v);
+}
+
+TAC_Val tac_inc_dec(bool inc, bool pre, AST_Expression exp, VectorTAC_Ins *v) {
+    TAC_Val src = tac_expression(*exp.unary_exp, v);
+    TAC_Val dst = generate_new_var();
+    TAC_Ins inc_or_dec;
+    inc_or_dec.type = inc ? TAC_INS_BINARY_ADD : TAC_INS_BINARY_SUB;
+    inc_or_dec.src1 = src;
+    inc_or_dec.src2 = generate_constant(1);
+    inc_or_dec.binary_dst = src;
+    
+    if(pre) {
+        insert_vectorTAC_Ins(v, inc_or_dec);
+        tac_copy(src, dst, v);
+    } else {
+        tac_copy(src, dst, v);
+        insert_vectorTAC_Ins(v, inc_or_dec);
+    }
+    return dst;
 }
 
 TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
@@ -100,6 +127,10 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
             ret.type = TAC_VAL_CONSTANT;
             ret.constant = exp.constant;
             return ret;
+        case EXP_VAR:
+            ret.type = TAC_VAL_VAR;
+            ret.var = exp.var_id;
+            return ret;
         //unary expressions
         case EXP_UNARY_NEG:
             return tac_unary(exp, TAC_INS_UNARY_NEG, v);
@@ -107,6 +138,14 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
             return tac_unary(exp, TAC_INS_UNARY_COMPLEMENT, v);
         case EXP_UNARY_LOGICAL_NOT:
             return tac_unary(exp, TAC_INS_UNARY_LOGICAL_NOT, v);
+        case EXP_UNARY_PRE_INCREMENT:
+            return tac_inc_dec(true, true, exp, v);
+        case EXP_UNARY_PRE_DECREMENT:
+            return tac_inc_dec(false, true, exp, v);
+        case EXP_UNARY_POST_INCREMENT:
+            return tac_inc_dec(true, false, exp, v);
+        case EXP_UNARY_POST_DECREMENT:
+            return tac_inc_dec(false, false, exp, v);
         //binary expressions
         case EXP_BINARY_ADD:
             return tac_binary(exp, TAC_INS_BINARY_ADD, v);
@@ -132,35 +171,79 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
             return tac_binary_short_circuit(exp, 0, v);
         case EXP_BINARY_LOGICAL_OR:
             return tac_binary_short_circuit(exp, 1, v);
-        case EXP_EQUAL:
+        case EXP_BINARY_EQUAL:
             return tac_binary(exp, TAC_INS_BINARY_EQUAL, v);
-        case EXP_NOT_EQUAL:
+        case EXP_BINARY_NOT_EQUAL:
             return tac_binary(exp, TAC_INS_BINARY_NOT_EQUAL, v);
-        case EXP_LESS_THAN:
+        case EXP_BINARY_LESS_THAN:
             return tac_binary(exp, TAC_INS_BINARY_LESS_THAN, v);
-        case EXP_GREATER_THAN:
+        case EXP_BINARY_GREATER_THAN:
             return tac_binary(exp, TAC_INS_BINARY_GREATER_THAN, v);
-        case EXP_LESS_OR_EQUAL:
+        case EXP_BINARY_LESS_OR_EQUAL:
             return tac_binary(exp, TAC_INS_BINARY_LESS_OR_EQUAL, v);
-        case EXP_GREATER_OR_EQUAL:
+        case EXP_BINARY_GREATER_OR_EQUAL:
             return tac_binary(exp, TAC_INS_BINARY_GREATER_OR_EQUAL, v);
+        case EXP_BINARY_ASSIGN:
+            return tac_copy(tac_expression(*exp.right_exp, v), 
+                            tac_expression(*exp.left_exp, v), v);
+        case EXP_BINARY_ADD_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_ADD, exp, v);
+        case EXP_BINARY_SUB_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_SUB, exp, v);
+        case EXP_BINARY_MUL_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_MUL, exp, v);
+        case EXP_BINARY_DIV_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_DIV, exp, v);
+        case EXP_BINARY_REMAINDER_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_REMAINDER, exp, v);
+        case EXP_BINARY_AND_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_BITWISE_AND, exp, v);
+        case EXP_BINARY_OR_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_BITWISE_OR, exp, v);
+        case EXP_BINARY_XOR_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_BITWISE_XOR, exp, v);
+        case EXP_BINARY_LEFT_SHIFT_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_LEFT_SHIFT, exp, v);
+        case EXP_BINARY_RIGHT_SHIFT_ASSIGN:
+            return tac_binary_assign(TAC_INS_BINARY_RIGHT_SHIFT, exp, v);
     }
 }
 
 TAC_Function tac_function(AST_Function function) {
     TAC_Function ret;
     ret.name = function.name.str;
-    init_vectorTAC_Ins(&ret.instructions, 2);
-    TAC_Ins ret_ins;
-    ret_ins.type = TAC_INS_RETURN;
-    ret_ins.ret = tac_expression(function.statement.ret, &ret.instructions);
-    insert_vectorTAC_Ins(&ret.instructions, ret_ins);
+    init_vectorTAC_Ins(&ret.instructions, function.block_items.size*2);
+    for(int i = 0;i < function.block_items.size;i++) {
+        AST_BlockItem bi = function.block_items.array[i];
+        switch(bi.type) {
+            case AST_STATEMENT_RETURN:
+            {
+                TAC_Ins ret_ins;
+                ret_ins.type = TAC_INS_RETURN;
+                ret_ins.ret = tac_expression(bi.exp, &ret.instructions);
+                insert_vectorTAC_Ins(&ret.instructions, ret_ins);
+                ret.var_cnt = var_counter+1;
+                break;
+            }
+            case AST_STATEMENT_EXP:
+                tac_expression(bi.exp, &ret.instructions);
+                break;
+            case AST_DECLARATION_WITH_ASSIGN:
+                tac_copy(tac_expression(bi.assign_exp, &ret.instructions), 
+                         tac_expression(bi.var, &ret.instructions), 
+                         &ret.instructions);
+                break;
+            case AST_STATEMENT_NULL:
+            case AST_DECLARATION_NO_ASSIGN:
+                break;
+        }
+    }
     ret.var_cnt = generate_new_var().var;
     return ret;
 }
 
 TAC_Program emit_tacky(AST_Program ast_program) {
-    var_counter = 0;
+    var_counter = ast_program.var_cnt;
     label_counter = 0;
 
     TAC_Program ret;

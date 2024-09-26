@@ -1,7 +1,5 @@
 #include "code_emitter.h"
 
-#include <stdio.h>
-
 #include "asm_generator.h"
 #include "string_view.h"
 

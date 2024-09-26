@@ -3,6 +3,7 @@
 #include "read_file.h"
 #include "lexer.h"
 #include "parser.h"
+#include "semantic_anal.h"
 #include "tacky.h"
 #include "asm_generator.h"
 #include "code_emitter.h"
@@ -30,7 +31,15 @@ int main(int argc, char **argv) {
     if(ast_program.error)
         return ast_program.error;
     if(argv[1][0] == 'p') {
-        pretty_print_program(ast_program);
+        pretty_print_program(ast_program, false);
+        return 0;
+    }
+    //semantic anal
+    resolve_program(&ast_program);
+    if(ast_program.error)
+        return ast_program.error;
+    if(argv[1][0] == 's') {
+        pretty_print_program(ast_program, true);
         return 0;
     }
     //tacky

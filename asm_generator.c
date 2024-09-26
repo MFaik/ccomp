@@ -1,11 +1,7 @@
 #include "asm_generator.h"
+vector_body(ASM_Ins);
 
 #include <stdbool.h>
-
-#include "tacky.h"
-#include "vector.h"
-
-vector_body(ASM_Ins);
 
 ASM_Operand assemble_constant(int constant) {
     return (ASM_Operand){OP_IMM, constant};
@@ -175,7 +171,6 @@ void assemble_comp(ASM_Cond cond, TAC_Ins tac_ins, VectorASM_Ins *v) {
 }
 
 void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
-    ASM_Ins asm_ins;
     switch(tac_ins.type) {
         case TAC_INS_RETURN:
         {
@@ -257,14 +252,9 @@ void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
             assemble_comp(ASM_COND_LE, tac_ins, v);
             break;
         case TAC_INS_COPY:
-        {
-            ASM_Ins mov;
-            mov.type = ASM_INS_MOV;
-            mov.src = assemble_operand(tac_ins.src);
-            mov.dst = assemble_operand(tac_ins.unary_dst);
-            insert_vectorASM_Ins(v, mov);
+            assemble_mov(assemble_operand(tac_ins.src), 
+                         assemble_operand(tac_ins.unary_dst), v);
             break;
-        }
         case TAC_INS_LABEL:
         {
             ASM_Ins label;

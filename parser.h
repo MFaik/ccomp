@@ -1,17 +1,21 @@
 #pragma once
 
+#include <stdbool.h>
+
 #include "lexer.h"
 #include "string_view.h"
+#include "vector.h"
 
 typedef enum {
-    STATEMENT_RETURN,
-    STATEMENT_IF,
-} AST_StatementType;
-typedef enum {
     EXP_CONSTANT,
+    EXP_VAR,
     EXP_UNARY_COMPLEMENT,
     EXP_UNARY_NEG,
     EXP_UNARY_LOGICAL_NOT,
+    EXP_UNARY_PRE_INCREMENT,
+    EXP_UNARY_POST_INCREMENT,
+    EXP_UNARY_PRE_DECREMENT,
+    EXP_UNARY_POST_DECREMENT,
     EXP_BINARY_ADD,
     EXP_BINARY_SUB,
     EXP_BINARY_MUL,
@@ -24,12 +28,23 @@ typedef enum {
     EXP_BINARY_BITWISE_XOR,
     EXP_BINARY_LOGICAL_AND,
     EXP_BINARY_LOGICAL_OR,
-    EXP_EQUAL,
-    EXP_NOT_EQUAL,
-    EXP_LESS_THAN,
-    EXP_GREATER_THAN,
-    EXP_LESS_OR_EQUAL,
-    EXP_GREATER_OR_EQUAL,
+    EXP_BINARY_ASSIGN,
+    EXP_BINARY_ADD_ASSIGN,
+    EXP_BINARY_SUB_ASSIGN,
+    EXP_BINARY_MUL_ASSIGN,
+    EXP_BINARY_DIV_ASSIGN,
+    EXP_BINARY_REMAINDER_ASSIGN,
+    EXP_BINARY_AND_ASSIGN,
+    EXP_BINARY_OR_ASSIGN,
+    EXP_BINARY_XOR_ASSIGN,
+    EXP_BINARY_LEFT_SHIFT_ASSIGN,
+    EXP_BINARY_RIGHT_SHIFT_ASSIGN,
+    EXP_BINARY_EQUAL,
+    EXP_BINARY_NOT_EQUAL,
+    EXP_BINARY_LESS_THAN,
+    EXP_BINARY_GREATER_THAN,
+    EXP_BINARY_LESS_OR_EQUAL,
+    EXP_BINARY_GREATER_OR_EQUAL,
 } AST_ExpressionType;
 
 typedef struct {
@@ -42,6 +57,8 @@ struct AST_Expression {
     union {
         int constant;
         AST_Expression *unary_exp;
+        StringView var_str;
+        unsigned var_id;
         struct {
             AST_Expression *left_exp;
             AST_Expression *right_exp;
@@ -49,20 +66,35 @@ struct AST_Expression {
     };
 };
 
+typedef enum {
+    AST_STATEMENT_RETURN,
+    AST_STATEMENT_EXP,
+    AST_STATEMENT_NULL,
+    AST_DECLARATION_NO_ASSIGN,
+    AST_DECLARATION_WITH_ASSIGN,
+} AST_BlockItemType;
 typedef struct {
-    AST_Expression ret;
-} AST_Statement;
+    AST_BlockItemType type;
+    union {
+        AST_Expression exp;
+        struct {
+            AST_Expression var;
+            AST_Expression assign_exp;
+        };
+    };
+} AST_BlockItem;
+vector_header(AST_BlockItem);
 
 typedef struct {
     AST_Identifier name;
-    AST_Statement statement;
+    VectorAST_BlockItem block_items;
 } AST_Function;
 
 typedef struct {
     AST_Function function;
     int error;
+    unsigned var_cnt;
 } AST_Program;
 
 AST_Program parse_program(VectorTerm _terms);
-void pretty_print_program(AST_Program program);
-
+void pretty_print_program(AST_Program program, bool variable_resolved);

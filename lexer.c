@@ -33,6 +33,17 @@ const char* TermNames[] = {
     "greater than",
     "less or equal",
     "greater or equal",
+    "assign",
+    "add_assign",
+    "sub_assign",
+    "mul_assign",
+    "div_assign",
+    "remainder_assign",
+    "and_assign",
+    "or_assign",
+    "xor_assign",
+    "left_shift_assign",
+    "right_shift_assign",
     "end of file",
 };
 
@@ -61,6 +72,9 @@ struct {
     const char* str;
     int size;
 } symbol_str[] = {
+    //three char symbols
+    {TERM_LEFT_SHIFT_ASSIGN, "<<=", 3},
+    {TERM_RIGHT_SHIFT_ASSIGN, ">>=", 3},
     //two char symbols
     {TERM_DECREMENT, "--", 2},
     {TERM_INCREMENT, "++", 2},
@@ -72,6 +86,14 @@ struct {
     {TERM_NOT_EQUAL, "!=", 2},
     {TERM_LESS_OR_EQUAL, "<=", 2},
     {TERM_GREATER_OR_EQUAL, ">=", 2},
+    {TERM_ADD_ASSIGN, "+=", 2},
+    {TERM_SUB_ASSIGN, "-=", 2},
+    {TERM_MUL_ASSIGN, "*=", 2},
+    {TERM_DIV_ASSIGN, "/=", 2},
+    {TERM_REMAINDER_ASSIGN, "%=", 2},
+    {TERM_AND_ASSIGN, "&=", 2},
+    {TERM_OR_ASSIGN, "|=", 2},
+    {TERM_XOR_ASSIGN, "^=", 2},
     //one char symbols
     {TERM_OPEN_PAR, "(", 1},
     {TERM_CLOSE_PAR, ")", 1},
@@ -90,6 +112,7 @@ struct {
     {TERM_LOGICAL_NOT, "!", 1},
     {TERM_LESS_THAN, "<", 1},
     {TERM_GREATER_THAN, ">", 1},
+    {TERM_ASSIGN, "=", 1},
 };
 
 void eat_identifier(VectorTerm *v) {
@@ -117,7 +140,7 @@ void eat_constant(VectorTerm *v) {
     long constant = 0;
     while(isdigit(*(code_ptr+cnt))) {
         constant *= 10;
-        constant += *code_ptr-'0';
+        constant += *(code_ptr+cnt)-'0';
         cnt++;
     }
     Term t;

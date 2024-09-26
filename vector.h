@@ -8,15 +8,15 @@ typedef struct {\
     size_t size;\
     size_t capacity;\
 } Vector##Type;\
-void init_vector##Type(Vector##Type *v, size_t initial_size);\
+void init_vector##Type(Vector##Type *v, size_t initial_capacity);\
 char insert_vector##Type(Vector##Type *v, Type t);\
 void free_vector##Type(Vector##Type *v);
 
 #define vector_body(Type)\
-void init_vector##Type(Vector##Type *v, size_t initial_size) {\
-    v->array = (Type*)malloc(initial_size * sizeof(Type));\
+void init_vector##Type(Vector##Type *v, size_t initial_capacity) {\
+    v->array = (Type*)malloc(initial_capacity * sizeof(Type));\
     v->size = 0;\
-    v->capacity = initial_size;\
+    v->capacity = initial_capacity;\
 }\
 char insert_vector##Type(Vector##Type *v, Type t) {\
     if(v->size >= v->capacity) {\
