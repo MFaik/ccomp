@@ -9,6 +9,7 @@
 typedef enum {
     EXP_CONSTANT,
     EXP_VAR,
+    EXP_CONDITIONAL,
     EXP_UNARY_COMPLEMENT,
     EXP_UNARY_NEG,
     EXP_UNARY_LOGICAL_NOT,
@@ -63,6 +64,11 @@ struct AST_Expression {
             AST_Expression *left_exp;
             AST_Expression *right_exp;
         };
+        struct {
+            AST_Expression *cond;
+            AST_Expression *true_exp;
+            AST_Expression *false_exp;
+        };
     };
 };
 
@@ -70,10 +76,13 @@ typedef enum {
     AST_STATEMENT_RETURN,
     AST_STATEMENT_EXP,
     AST_STATEMENT_NULL,
+    AST_STATEMENT_IF,
+    AST_STATEMENT_IF_ELSE,
     AST_DECLARATION_NO_ASSIGN,
     AST_DECLARATION_WITH_ASSIGN,
 } AST_BlockItemType;
-typedef struct {
+typedef struct AST_BlockItem AST_BlockItem;
+struct AST_BlockItem {
     AST_BlockItemType type;
     union {
         AST_Expression exp;
@@ -81,8 +90,13 @@ typedef struct {
             AST_Expression var;
             AST_Expression assign_exp;
         };
+        struct {
+            AST_Expression cond;
+            AST_BlockItem *then;
+            AST_BlockItem *else_;
+        };
     };
-} AST_BlockItem;
+};
 vector_header(AST_BlockItem);
 
 typedef struct {

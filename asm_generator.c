@@ -158,13 +158,15 @@ void assemble_jmp(bool jump_on_true, TAC_Ins tac_ins, VectorASM_Ins *v) {
 }
 
 void assemble_comp(ASM_Cond cond, TAC_Ins tac_ins, VectorASM_Ins *v) {
-    ASM_Operand src = assemble_operand(tac_ins.src);
-    ASM_Operand dst = assemble_operand(tac_ins.unary_dst);
+    ASM_Operand src1 = assemble_operand(tac_ins.src1);
+    ASM_Operand src2 = assemble_operand(tac_ins.src2);
+    ASM_Operand dst = assemble_operand(tac_ins.binary_dst);
 
     ASM_Ins cmp;
     cmp.type = ASM_INS_CMP;
-    cmp.src = MMtoRM(src, dst, v);
-    cmp.dst = IItoRI(dst, src, v);
+    cmp.src = MMtoRM(src1, src2, v);
+    cmp.dst = IItoRI(src2, src1, v);
+
     insert_vectorASM_Ins(v, cmp);
     
     assemble_setcc(cond, dst, v);

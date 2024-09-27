@@ -38,6 +38,28 @@ TAC_Val tac_copy(TAC_Val src, TAC_Val dst, VectorTAC_Ins *v) {
     return dst;
 }
 
+void tac_label(TAC_Val label, VectorTAC_Ins *v) {
+    TAC_Ins ins;
+    ins.type = TAC_INS_LABEL;
+    ins.label = label;
+    insert_vectorTAC_Ins(v, ins);
+}
+
+void tac_jump_cond(bool jump_on_true, TAC_Val condition, TAC_Val target, VectorTAC_Ins *v) {
+    TAC_Ins jmp;
+    jmp.type = jump_on_true ? TAC_INS_JMP_IF_NOT_ZERO : TAC_INS_JMP_IF_ZERO;
+    jmp.condition = condition;
+    jmp.target = target;
+    insert_vectorTAC_Ins(v, jmp);
+}
+
+void tac_jump(TAC_Val target, VectorTAC_Ins *v) {
+    TAC_Ins jmp;
+    jmp.type = TAC_INS_JMP;
+    jmp.target = target;
+    insert_vectorTAC_Ins(v, jmp);
+}
+
 TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v);
 TAC_Val tac_unary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
     TAC_Ins ins;
@@ -64,33 +86,18 @@ TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTA
     TAC_Val ret = generate_new_var();
 
     TAC_Val left = tac_expression(*exp.left_exp, v);
-
-    TAC_Ins jmp;
-    jmp.type = jump_on_true ? TAC_INS_JMP_IF_NOT_ZERO : TAC_INS_JMP_IF_ZERO;
-    jmp.condition = left;
-    jmp.target = skip_label;
-    insert_vectorTAC_Ins(v, jmp);
+    tac_jump_cond(jump_on_true, left, skip_label, v);
 
     TAC_Val right = tac_expression(*exp.right_exp, v);
-
-    jmp.condition = right;
-    insert_vectorTAC_Ins(v, jmp);
+    tac_jump_cond(jump_on_true, right, skip_label, v);
 
     tac_copy(generate_constant(!jump_on_true), ret, v);
+    tac_jump(end_label, v);
 
-    jmp.type = TAC_INS_JMP;
-    jmp.target = end_label;
-    insert_vectorTAC_Ins(v, jmp);
-
-    TAC_Ins label;
-    label.type = TAC_INS_LABEL;
-    label.label = skip_label;
-    insert_vectorTAC_Ins(v, label);
-
+    tac_label(skip_label, v);
     tac_copy(generate_constant(jump_on_true), ret, v);
     
-    label.label = end_label;
-    insert_vectorTAC_Ins(v, label);
+    tac_label(end_label, v);
 
     return ret;
 }
@@ -120,6 +127,27 @@ TAC_Val tac_inc_dec(bool inc, bool pre, AST_Expression exp, VectorTAC_Ins *v) {
     return dst;
 }
 
+TAC_Val tac_conditional(AST_Expression exp, VectorTAC_Ins *v) {
+    TAC_Val ret = generate_new_var();
+    TAC_Val false_label = generate_new_label();
+    TAC_Val end_label = generate_new_label();
+
+    TAC_Val cond = tac_expression(*exp.cond, v);
+    
+    tac_jump_cond(false, cond, false_label, v);
+
+    TAC_Val true_exp = tac_expression(*exp.true_exp, v);
+    tac_copy(true_exp, ret, v);
+    tac_jump(end_label, v);
+
+    tac_label(false_label, v);
+    TAC_Val false_exp = tac_expression(*exp.false_exp, v);
+    tac_copy(false_exp, ret, v);
+
+    tac_label(end_label, v);
+    return ret;
+}
+
 TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
     TAC_Val ret;
     switch(exp.type) {
@@ -131,6 +159,8 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
             ret.type = TAC_VAL_VAR;
             ret.var = exp.var_id;
             return ret;
+        case EXP_CONDITIONAL:
+            return tac_conditional(exp, v);
         //unary expressions
         case EXP_UNARY_NEG:
             return tac_unary(exp, TAC_INS_UNARY_NEG, v);
@@ -209,36 +239,62 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
     }
 }
 
+void tac_statement(AST_BlockItem bi, VectorTAC_Ins *v) {
+    switch(bi.type) {
+        case AST_STATEMENT_RETURN:
+        {
+            TAC_Ins ret_ins;
+            ret_ins.type = TAC_INS_RETURN;
+            ret_ins.ret = tac_expression(bi.exp, v);
+            insert_vectorTAC_Ins(v, ret_ins);
+            break;
+        }
+        case AST_STATEMENT_EXP:
+            tac_expression(bi.exp, v);
+            break;
+        case AST_STATEMENT_IF:
+        case AST_STATEMENT_IF_ELSE:
+        {
+            TAC_Val else_label = generate_new_label();
+            TAC_Val end_label;
+            if(bi.type == AST_STATEMENT_IF_ELSE)
+                end_label = generate_new_label();
+
+            TAC_Val cond = tac_expression(bi.cond, v);
+            tac_jump_cond(false, cond, else_label, v);
+
+            tac_statement(*bi.then, v);
+
+            if(bi.type != AST_STATEMENT_IF_ELSE) {
+                tac_label(else_label, v);
+            } else {
+                tac_jump(end_label, v);
+
+                tac_label(else_label, v);
+                tac_statement(*bi.else_, v);
+
+                tac_label(end_label, v);
+            }
+            break;
+        }
+        case AST_DECLARATION_WITH_ASSIGN:
+            tac_copy(tac_expression(bi.assign_exp, v), 
+                     tac_expression(bi.var, v), v);
+            break;
+        case AST_STATEMENT_NULL:
+        case AST_DECLARATION_NO_ASSIGN:
+            break;
+    }
+}
+
 TAC_Function tac_function(AST_Function function) {
     TAC_Function ret;
     ret.name = function.name.str;
     init_vectorTAC_Ins(&ret.instructions, function.block_items.size*2);
     for(int i = 0;i < function.block_items.size;i++) {
-        AST_BlockItem bi = function.block_items.array[i];
-        switch(bi.type) {
-            case AST_STATEMENT_RETURN:
-            {
-                TAC_Ins ret_ins;
-                ret_ins.type = TAC_INS_RETURN;
-                ret_ins.ret = tac_expression(bi.exp, &ret.instructions);
-                insert_vectorTAC_Ins(&ret.instructions, ret_ins);
-                ret.var_cnt = var_counter+1;
-                break;
-            }
-            case AST_STATEMENT_EXP:
-                tac_expression(bi.exp, &ret.instructions);
-                break;
-            case AST_DECLARATION_WITH_ASSIGN:
-                tac_copy(tac_expression(bi.assign_exp, &ret.instructions), 
-                         tac_expression(bi.var, &ret.instructions), 
-                         &ret.instructions);
-                break;
-            case AST_STATEMENT_NULL:
-            case AST_DECLARATION_NO_ASSIGN:
-                break;
-        }
+        tac_statement(function.block_items.array[i], &ret.instructions);
     }
-    ret.var_cnt = generate_new_var().var;
+    ret.var_cnt = var_counter+1;
     return ret;
 }
 

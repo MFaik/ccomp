@@ -28,6 +28,12 @@ AST_Expression* alloc_exp(AST_Expression exp) {
     return ret;
 }
 
+AST_BlockItem* alloc_statement(AST_BlockItem statement) {
+    AST_BlockItem *ret = malloc(sizeof(AST_BlockItem));
+    *ret = statement;
+    return ret;
+}
+
 AST_Expression str_to_exp(StringView sv) {
     AST_Expression ret;
     ret.type = EXP_VAR;
@@ -114,6 +120,8 @@ unsigned binary_precedence(TermType t) {
         case TERM_LEFT_SHIFT_ASSIGN:
         case TERM_RIGHT_SHIFT_ASSIGN:
             return 2;
+        case TERM_QUESTION:
+            return 3;
         case TERM_LOGICAL_OR:
             return 4;
         case TERM_LOGICAL_AND:
@@ -207,13 +215,16 @@ AST_ExpressionType binary_term_to_exp(TermType t) {
             return EXP_BINARY_LEFT_SHIFT_ASSIGN;
         case TERM_RIGHT_SHIFT_ASSIGN:
             return EXP_BINARY_RIGHT_SHIFT_ASSIGN;
+        case TERM_QUESTION:
+            return EXP_CONDITIONAL;
         default:
             return -1;
     }
 }
 
 bool right_assoc(TermType t) {
-    return t == TERM_ASSIGN;
+    return t == TERM_ASSIGN ||
+           t == TERM_QUESTION;
 }
 
 AST_Expression parse_exp(unsigned min_prec) {
@@ -225,7 +236,14 @@ AST_Expression parse_exp(unsigned min_prec) {
         if(right_assoc(terms.array[term_ptr].type))
             next_prec--;
         term_ptr++;
-        ret.right_exp = alloc_exp(parse_exp(next_prec));if(error)return ret;
+        if(ret.type == EXP_CONDITIONAL) {
+            ret.cond = ret.left_exp;
+            ret.true_exp = alloc_exp(parse_exp(0));if(error)return ret;
+            eat_term_adv_ret(TERM_COLON, ret);
+            ret.false_exp = alloc_exp(parse_exp(next_prec));if(error)return ret;
+        } else {
+            ret.right_exp = alloc_exp(parse_exp(next_prec));if(error)return ret;
+        }
         next_prec = binary_precedence(terms.array[term_ptr].type);
     }
     return ret;
@@ -233,15 +251,29 @@ AST_Expression parse_exp(unsigned min_prec) {
 
 AST_BlockItem parse_statement() {
     if(terms.array[term_ptr].type == TERM_RETURN) {
+        term_ptr++;
         AST_BlockItem ret;
         ret.type = AST_STATEMENT_RETURN;
-        eat_term_adv_ret(TERM_RETURN, ret);
         ret.exp = parse_exp(0);if(error)return ret;
         eat_term_adv_ret(TERM_SEMICOLON, ret);
         return ret;
     } else if(terms.array[term_ptr].type == TERM_SEMICOLON) {
         term_ptr++;
         return (AST_BlockItem){AST_STATEMENT_NULL};
+    } else if(terms.array[term_ptr].type == TERM_IF) {
+        term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_IF;
+        eat_term_adv_ret(TERM_OPEN_PAR, ret);
+        ret.cond = parse_exp(0);if(error)return ret;
+        eat_term_adv_ret(TERM_CLOSE_PAR, ret);
+        ret.then = alloc_statement(parse_statement());
+        if(terms.array[term_ptr].type == TERM_ELSE) {
+            term_ptr++;
+            ret.type = AST_STATEMENT_IF_ELSE;
+            ret.else_ = alloc_statement(parse_statement());
+        }
+        return ret;
     } else {
         AST_BlockItem exp;
         exp.type = AST_STATEMENT_EXP;
@@ -301,6 +333,9 @@ AST_Program parse_program(VectorTerm _terms) {
     AST_Program ret;
     ret.error = 0;
     ret.function = parse_function();
+    if(!error)
+        eat_term(TERM_EOF);
+
     if(error)
         ret.error = error;
     return ret;
@@ -346,6 +381,15 @@ void pretty_print_expression(AST_Expression exp) {
                 printf("%.*s", exp.var_str.len, exp.var_str.start);
             else
                 printf("$%u", exp.var_id);
+            break;
+        case EXP_CONDITIONAL:
+            printf("(");
+            pretty_print_expression(*exp.cond);
+            printf(" ? ");
+            pretty_print_expression(*exp.true_exp);
+            printf(" : ");
+            pretty_print_expression(*exp.false_exp);
+            printf(")");
             break;
         case EXP_UNARY_COMPLEMENT:
             pretty_print_prefix_expression(exp, "~");
@@ -473,6 +517,23 @@ void pretty_print_block_item(AST_BlockItem bi, unsigned space) {
             break;
         case AST_STATEMENT_NULL:
             printf(";\n");
+            break;
+        case AST_STATEMENT_IF:
+            printf_space(space);
+            printf("if( ");
+            pretty_print_expression(bi.cond);
+            printf(" )\n");
+            pretty_print_block_item(*bi.then, space+1);
+            break;
+        case AST_STATEMENT_IF_ELSE:
+            printf_space(space);
+            printf("if( ");
+            pretty_print_expression(bi.cond);
+            printf(" )\n");
+            pretty_print_block_item(*bi.then, space+1);
+            printf_space(space);
+            printf("else\n");
+            pretty_print_block_item(*bi.else_, space+1);
             break;
         case AST_DECLARATION_NO_ASSIGN:
             printf_space(space);

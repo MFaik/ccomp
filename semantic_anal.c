@@ -27,6 +27,11 @@ void resolve_expression(AST_Expression *exp, SVMap* var_map) {
                 return;
             }
             break;
+        case EXP_CONDITIONAL:
+            resolve_expression(exp->cond, var_map);
+            resolve_expression(exp->true_exp, var_map);
+            resolve_expression(exp->false_exp, var_map);
+            break;
         case EXP_CONSTANT:
             break;
         case EXP_UNARY_COMPLEMENT:
@@ -95,8 +100,15 @@ void resolve_declaration(AST_BlockItem *bi, SVMap *var_map) {
 }
 
 void resolve_statement(AST_BlockItem *bi, SVMap *var_map) {
-    if(bi->type != AST_STATEMENT_NULL)
-        resolve_expression(&bi->exp, var_map);
+    if(bi->type == AST_STATEMENT_IF || bi->type == AST_STATEMENT_IF_ELSE) {
+        resolve_expression(&bi->cond, var_map);
+        resolve_statement(bi->then, var_map);
+        if(bi->type == AST_STATEMENT_IF_ELSE)
+            resolve_statement(bi->else_, var_map);
+    } else {
+        if(bi->type != AST_STATEMENT_NULL)
+            resolve_expression(&bi->exp, var_map);
+    }
 }
 
 void resolve_function(AST_Function *f) {
@@ -107,6 +119,8 @@ void resolve_function(AST_Function *f) {
             case AST_STATEMENT_RETURN:
             case AST_STATEMENT_EXP:
             case AST_STATEMENT_NULL:
+            case AST_STATEMENT_IF:
+            case AST_STATEMENT_IF_ELSE:
                 resolve_statement(&f->block_items.array[i], &var_map);
                 break;
             case AST_DECLARATION_NO_ASSIGN:
@@ -125,4 +139,3 @@ void resolve_program(AST_Program *p) {
     p->error = error;
     p->var_cnt = var_cnt;
 }
-

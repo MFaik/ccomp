@@ -12,7 +12,7 @@ unsigned long hash(StringView sv) {
 }
 
 void init_map(SVMap* map, unsigned id_start) {
-    const unsigned min_bucket = 64;
+    const unsigned min_bucket = 1;
     map->id = id_start;
     map->size = 0;
     init_vectorVectorSVNumPair(&map->sv_arr, min_bucket);

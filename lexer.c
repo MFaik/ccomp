@@ -11,6 +11,10 @@ const char* TermNames[] = {
     "int",
     "void",
     "return",
+    "if",
+    "else",
+    "question",
+    "colon",
     "complement",
     "decrement",
     "increment",
@@ -62,7 +66,9 @@ struct {
 } keyword_str[] = {
     {TERM_INT, "int", 3},
     {TERM_VOID, "void", 4},
-    {TERM_RETURN, "return", 6}
+    {TERM_RETURN, "return", 6},
+    {TERM_IF, "if", 2},
+    {TERM_ELSE, "else", 4},
 };
 
 //the symbols are in decreasing order 
@@ -95,6 +101,8 @@ struct {
     {TERM_OR_ASSIGN, "|=", 2},
     {TERM_XOR_ASSIGN, "^=", 2},
     //one char symbols
+    {TERM_QUESTION, "?", 1},
+    {TERM_COLON, ":", 1},
     {TERM_OPEN_PAR, "(", 1},
     {TERM_CLOSE_PAR, ")", 1},
     {TERM_OPEN_BRACE, "{", 1},
@@ -178,6 +186,15 @@ bool eat_symbol(VectorTerm *v) {
 bool make_term(VectorTerm *v) {
     while(isspace(*code_ptr))code_ptr++;
     if(*code_ptr == 0) return false;
+    if(*code_ptr == '/' && *(code_ptr+1) == '/') {
+        while(*code_ptr != '\n')code_ptr++;
+        return true;
+    }
+    if(*code_ptr == '/' && *(code_ptr+1) == '*') {
+        while(*code_ptr != '*' || *(code_ptr+1) != '/')code_ptr++;
+        code_ptr += 2;
+        return true;
+    }
     if(isalpha(*code_ptr)) {
         eat_identifier(v);
         return true;
@@ -203,10 +220,10 @@ VectorTerm lex(char* file) {
     init_vectorTerm(&ret, 16);
     code_ptr = file;
     while(make_term(&ret));
+    insert_vectorTerm(&ret, (Term){TERM_EOF});
     if(error) {
         ret.size = 0;
     }
-    insert_vectorTerm(&ret, (Term){TERM_EOF});
     return ret;
 }
 
