@@ -6,7 +6,7 @@
 
 typedef enum {
     TAC_VAL_CONSTANT,
-    TAC_VAL_VAR
+    TAC_VAL_VAR,
 } TAC_Val_Type;
 typedef enum {
     TAC_INS_RETURN,

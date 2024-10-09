@@ -25,15 +25,15 @@ void assemble_mov(ASM_Operand src, ASM_Operand dst, VectorASM_Ins *v) {
     if(src.type == OP_PSEUDO && dst.type == OP_PSEUDO) {
         mov.src = src;
         mov.dst = (ASM_Operand){OP_REG_R10};
-        insert_vectorASM_Ins(v, mov);
+        push_vectorASM_Ins(v, mov);
         
         mov.src = (ASM_Operand){OP_REG_R10};
         mov.dst = dst;
-        insert_vectorASM_Ins(v, mov);
+        push_vectorASM_Ins(v, mov);
     } else {
         mov.src = src;
         mov.dst = dst;
-        insert_vectorASM_Ins(v, mov);
+        push_vectorASM_Ins(v, mov);
     }
 }
 
@@ -46,7 +46,7 @@ void assemble_unary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
     ASM_Ins ins;
     ins.type = type;
     ins.op = dst;
-    insert_vectorASM_Ins(v, ins);
+    push_vectorASM_Ins(v, ins);
 }
 
 void assemble_setcc(ASM_Cond cond, ASM_Operand dst, VectorASM_Ins *v) {
@@ -54,13 +54,13 @@ void assemble_setcc(ASM_Cond cond, ASM_Operand dst, VectorASM_Ins *v) {
     mov.type = ASM_INS_MOV;
     mov.src = assemble_constant(0);
     mov.dst = dst;
-    insert_vectorASM_Ins(v, mov);
+    push_vectorASM_Ins(v, mov);
 
     ASM_Ins set;
     set.type = ASM_INS_SETCC;
     set.cond = cond;
     set.set_op = dst;
-    insert_vectorASM_Ins(v, set);
+    push_vectorASM_Ins(v, set);
 }
 
 ASM_Operand MMtoRM(ASM_Operand a, ASM_Operand b, VectorASM_Ins *v) {
@@ -89,7 +89,7 @@ void assemble_unary_logical_not(TAC_Ins tac_ins, VectorASM_Ins *v) {
     cmp.type = ASM_INS_CMP;
     cmp.src = assemble_constant(0);
     cmp.dst = IItoRI(src, cmp.src, v);
-    insert_vectorASM_Ins(v, cmp);
+    push_vectorASM_Ins(v, cmp);
 
     assemble_setcc(ASM_COND_E, dst, v);
 }
@@ -105,19 +105,19 @@ void assemble_binary(ASM_InsType type, TAC_Ins tac_ins, VectorASM_Ins *v) {
         assemble_mov(src2, (ASM_Operand){OP_REG_R11}, v);
         ins.src = (ASM_Operand){OP_REG_R10};
         ins.dst = (ASM_Operand){OP_REG_R11};
-        insert_vectorASM_Ins(v, ins);
+        push_vectorASM_Ins(v, ins);
         assemble_mov((ASM_Operand){OP_REG_R11}, dst, v);
     } else if(type == ASM_INS_BINARY_LEFT_SHIFT || type == ASM_INS_BINARY_RIGHT_SHIFT) {
         assemble_mov(src1, dst, v);
         ins.dst = dst;
         assemble_mov(src2, (ASM_Operand){OP_REG_CX}, v);
         ins.src = (ASM_Operand){OP_REG_CX};
-        insert_vectorASM_Ins(v, ins);
+        push_vectorASM_Ins(v, ins);
     } else {
         assemble_mov(src1, dst, v);
         ins.dst = dst;
         ins.src = MMtoRM(src2, dst, v);
-        insert_vectorASM_Ins(v, ins);
+        push_vectorASM_Ins(v, ins);
     }
 }
 
@@ -126,7 +126,7 @@ void assemble_div(bool is_remainder, TAC_Ins tac_ins, VectorASM_Ins *v) {
     ASM_Operand src2 = assemble_operand(tac_ins.src2);
     ASM_Operand dst = assemble_operand(tac_ins.unary_dst);
     assemble_mov(src1, (ASM_Operand){OP_REG_AX}, v);
-    insert_vectorASM_Ins(v, (ASM_Ins){ASM_INS_CDQ});
+    push_vectorASM_Ins(v, (ASM_Ins){ASM_INS_CDQ});
     ASM_Ins ins;
     ins.type = ASM_INS_UNARY_IDIV;
     if(src2.type == OP_IMM) {
@@ -135,7 +135,7 @@ void assemble_div(bool is_remainder, TAC_Ins tac_ins, VectorASM_Ins *v) {
     } else {
         ins.op = src2;
     }
-    insert_vectorASM_Ins(v, ins);
+    push_vectorASM_Ins(v, ins);
     if(is_remainder) {
         assemble_mov((ASM_Operand){OP_REG_DX}, dst, v);
     } else {
@@ -148,13 +148,13 @@ void assemble_jmp(bool jump_on_true, TAC_Ins tac_ins, VectorASM_Ins *v) {
     cmp.type = ASM_INS_CMP;
     cmp.src = assemble_constant(0);
     cmp.dst = IItoRI(assemble_operand(tac_ins.condition), cmp.src, v);
-    insert_vectorASM_Ins(v, cmp);
+    push_vectorASM_Ins(v, cmp);
 
     ASM_Ins jmp;
     jmp.type = ASM_INS_JMPCC;
     jmp.cond = jump_on_true ? ASM_COND_NE : ASM_COND_E;
     jmp.label = tac_ins.target.var;
-    insert_vectorASM_Ins(v, jmp);
+    push_vectorASM_Ins(v, jmp);
 }
 
 void assemble_comp(ASM_Cond cond, TAC_Ins tac_ins, VectorASM_Ins *v) {
@@ -167,7 +167,7 @@ void assemble_comp(ASM_Cond cond, TAC_Ins tac_ins, VectorASM_Ins *v) {
     cmp.src = MMtoRM(src1, src2, v);
     cmp.dst = IItoRI(src2, src1, v);
 
-    insert_vectorASM_Ins(v, cmp);
+    push_vectorASM_Ins(v, cmp);
     
     assemble_setcc(cond, dst, v);
 }
@@ -179,7 +179,7 @@ void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
             ASM_Operand src = assemble_operand(tac_ins.ret);
             ASM_Operand dst = (ASM_Operand){OP_REG_AX};
             assemble_mov(src, dst, v);
-            insert_vectorASM_Ins(v, (ASM_Ins){ASM_INS_RET});
+            push_vectorASM_Ins(v, (ASM_Ins){ASM_INS_RET});
             break;
         }
         case TAC_INS_UNARY_NEG:
@@ -226,7 +226,7 @@ void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
             ASM_Ins jmp;
             jmp.type = ASM_INS_JMP;
             jmp.label = tac_ins.target.var;
-            insert_vectorASM_Ins(v, jmp);
+            push_vectorASM_Ins(v, jmp);
             break;
         }
         case TAC_INS_JMP_IF_ZERO:
@@ -262,7 +262,7 @@ void assemble_instruction(TAC_Ins tac_ins, VectorASM_Ins *v) {
             ASM_Ins label;
             label.type = ASM_INS_LABEL;
             label.label = tac_ins.label.var;
-            insert_vectorASM_Ins(v, label);
+            push_vectorASM_Ins(v, label);
             break;
         }
     }
@@ -275,7 +275,7 @@ ASM_Function assemble_function(TAC_Function function) {
     ASM_Ins a;
     a.type = ASM_INS_ALLOCATE;
     a.alloc = function.var_cnt;
-    insert_vectorASM_Ins(&ret.instructions, a);
+    push_vectorASM_Ins(&ret.instructions, a);
     for(int i = 0;i < function.instructions.size;i++) {
         assemble_instruction(function.instructions.array[i], &ret.instructions);
     }

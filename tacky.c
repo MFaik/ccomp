@@ -34,7 +34,7 @@ TAC_Val tac_copy(TAC_Val src, TAC_Val dst, VectorTAC_Ins *v) {
     copy.type = TAC_INS_COPY;
     copy.src = src;
     copy.unary_dst = dst;
-    insert_vectorTAC_Ins(v, copy);
+    push_vectorTAC_Ins(v, copy);
     return dst;
 }
 
@@ -42,7 +42,7 @@ void tac_label(TAC_Val label, VectorTAC_Ins *v) {
     TAC_Ins ins;
     ins.type = TAC_INS_LABEL;
     ins.label = label;
-    insert_vectorTAC_Ins(v, ins);
+    push_vectorTAC_Ins(v, ins);
 }
 
 void tac_jump_cond(bool jump_on_true, TAC_Val condition, TAC_Val target, VectorTAC_Ins *v) {
@@ -50,14 +50,14 @@ void tac_jump_cond(bool jump_on_true, TAC_Val condition, TAC_Val target, VectorT
     jmp.type = jump_on_true ? TAC_INS_JMP_IF_NOT_ZERO : TAC_INS_JMP_IF_ZERO;
     jmp.condition = condition;
     jmp.target = target;
-    insert_vectorTAC_Ins(v, jmp);
+    push_vectorTAC_Ins(v, jmp);
 }
 
 void tac_jump(TAC_Val target, VectorTAC_Ins *v) {
     TAC_Ins jmp;
     jmp.type = TAC_INS_JMP;
     jmp.target = target;
-    insert_vectorTAC_Ins(v, jmp);
+    push_vectorTAC_Ins(v, jmp);
 }
 
 TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v);
@@ -66,7 +66,7 @@ TAC_Val tac_unary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
     ins.type = type;
     ins.src = tac_expression(*exp.unary_exp, v);
     ins.unary_dst = generate_new_var();
-    insert_vectorTAC_Ins(v, ins);
+    push_vectorTAC_Ins(v, ins);
     return ins.unary_dst;
 }
 
@@ -76,7 +76,7 @@ TAC_Val tac_binary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
     ins.src1 = tac_expression(*exp.left_exp, v);
     ins.src2 = tac_expression(*exp.right_exp, v);
     ins.binary_dst = generate_new_var();
-    insert_vectorTAC_Ins(v, ins);
+    push_vectorTAC_Ins(v, ins);
     return ins.binary_dst;
 }
 
@@ -118,11 +118,11 @@ TAC_Val tac_inc_dec(bool inc, bool pre, AST_Expression exp, VectorTAC_Ins *v) {
     inc_or_dec.binary_dst = src;
     
     if(pre) {
-        insert_vectorTAC_Ins(v, inc_or_dec);
+        push_vectorTAC_Ins(v, inc_or_dec);
         tac_copy(src, dst, v);
     } else {
         tac_copy(src, dst, v);
-        insert_vectorTAC_Ins(v, inc_or_dec);
+        push_vectorTAC_Ins(v, inc_or_dec);
     }
     return dst;
 }
@@ -155,10 +155,13 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
             ret.type = TAC_VAL_CONSTANT;
             ret.constant = exp.constant;
             return ret;
-        case EXP_VAR:
+        case EXP_VAR_ID:
             ret.type = TAC_VAL_VAR;
             ret.var = exp.var_id;
             return ret;
+        case EXP_VAR_STR:
+            printf("internal error");
+            exit(2);
         case EXP_CONDITIONAL:
             return tac_conditional(exp, v);
         //unary expressions
@@ -241,12 +244,17 @@ TAC_Val tac_expression(AST_Expression exp, VectorTAC_Ins *v) {
 
 void tac_statement(AST_BlockItem bi, VectorTAC_Ins *v) {
     switch(bi.type) {
+        case AST_STATEMENT_COMPOUND:
+            for(int i = 0;i < bi.block.block_items.size;i++) {
+                tac_statement(bi.block.block_items.array[i], v);
+            }
+            break;
         case AST_STATEMENT_RETURN:
         {
             TAC_Ins ret_ins;
             ret_ins.type = TAC_INS_RETURN;
             ret_ins.ret = tac_expression(bi.exp, v);
-            insert_vectorTAC_Ins(v, ret_ins);
+            push_vectorTAC_Ins(v, ret_ins);
             break;
         }
         case AST_STATEMENT_EXP:
@@ -281,6 +289,12 @@ void tac_statement(AST_BlockItem bi, VectorTAC_Ins *v) {
             tac_copy(tac_expression(bi.assign_exp, v), 
                      tac_expression(bi.var, v), v);
             break;
+        case AST_STATEMENT_GOTO:
+            tac_jump(tac_expression(bi.exp, v), v);
+            break;
+        case AST_LABEL:
+            tac_label(tac_expression(bi.exp, v), v);
+            break;
         case AST_STATEMENT_NULL:
         case AST_DECLARATION_NO_ASSIGN:
             break;
@@ -290,9 +304,9 @@ void tac_statement(AST_BlockItem bi, VectorTAC_Ins *v) {
 TAC_Function tac_function(AST_Function function) {
     TAC_Function ret;
     ret.name = function.name.str;
-    init_vectorTAC_Ins(&ret.instructions, function.block_items.size*2);
-    for(int i = 0;i < function.block_items.size;i++) {
-        tac_statement(function.block_items.array[i], &ret.instructions);
+    init_vectorTAC_Ins(&ret.instructions, function.block.block_items.size*2);
+    for(int i = 0;i < function.block.block_items.size;i++) {
+        tac_statement(function.block.block_items.array[i], &ret.instructions);
     }
     ret.var_cnt = var_counter+1;
     return ret;
@@ -300,7 +314,7 @@ TAC_Function tac_function(AST_Function function) {
 
 TAC_Program emit_tacky(AST_Program ast_program) {
     var_counter = ast_program.var_cnt;
-    label_counter = 0;
+    label_counter = ast_program.label_cnt;
 
     TAC_Program ret;
     ret.function = tac_function(ast_program.function);

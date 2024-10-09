@@ -11,8 +11,14 @@ const char* TermNames[] = {
     "int",
     "void",
     "return",
+    "goto",
     "if",
     "else",
+    "do",
+    "while",
+    "for",
+    "break",
+    "continue",
     "question",
     "colon",
     "complement",
@@ -69,6 +75,12 @@ struct {
     {TERM_RETURN, "return", 6},
     {TERM_IF, "if", 2},
     {TERM_ELSE, "else", 4},
+    {TERM_GOTO, "goto", 4},
+    {TERM_DO, "do", 2},
+    {TERM_WHILE, "while", 5},
+    {TERM_FOR, "for", 3},
+    {TERM_BREAK, "break", 5},
+    {TERM_CONTINUE, "continue", 8},
 };
 
 //the symbols are in decreasing order 
@@ -139,7 +151,7 @@ void eat_identifier(VectorTerm *v) {
         t.type = TERM_IDENTIFIER;
         t.s = (StringView){code_ptr, cnt};
     }
-    insert_vectorTerm(v, t);
+    push_vectorTerm(v, t);
     code_ptr += cnt;
 }
 
@@ -154,7 +166,7 @@ void eat_constant(VectorTerm *v) {
     Term t;
     t.type = TERM_CONSTANT;
     t.constant = constant;
-    insert_vectorTerm(v, t);
+    push_vectorTerm(v, t);
     code_ptr += cnt;
 }
 
@@ -178,7 +190,7 @@ bool eat_symbol(VectorTerm *v) {
     if(t.type == -1) {
         return false;
     }
-    insert_vectorTerm(v, t);
+    push_vectorTerm(v, t);
     code_ptr += cnt;
     return true;
 }
@@ -220,7 +232,7 @@ VectorTerm lex(char* file) {
     init_vectorTerm(&ret, 16);
     code_ptr = file;
     while(make_term(&ret));
-    insert_vectorTerm(&ret, (Term){TERM_EOF});
+    push_vectorTerm(&ret, (Term){TERM_EOF});
     if(error) {
         ret.size = 0;
     }

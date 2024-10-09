@@ -8,7 +8,8 @@
 
 typedef enum {
     EXP_CONSTANT,
-    EXP_VAR,
+    EXP_VAR_STR,
+    EXP_VAR_ID,
     EXP_CONDITIONAL,
     EXP_UNARY_COMPLEMENT,
     EXP_UNARY_NEG,
@@ -76,12 +77,29 @@ typedef enum {
     AST_STATEMENT_RETURN,
     AST_STATEMENT_EXP,
     AST_STATEMENT_NULL,
+    AST_STATEMENT_GOTO,
     AST_STATEMENT_IF,
     AST_STATEMENT_IF_ELSE,
+    AST_STATEMENT_COMPOUND,
+    AST_STATEMENT_BREAK,
+    AST_STATEMENT_CONTINUE,
+    AST_STATEMENT_WHILE,
+    AST_STATEMENT_DO_WHILE,
+    AST_STATEMENT_FOR,
     AST_DECLARATION_NO_ASSIGN,
     AST_DECLARATION_WITH_ASSIGN,
+    AST_LABEL,
 } AST_BlockItemType;
+
+//pre-decleration shenanigans
 typedef struct AST_BlockItem AST_BlockItem;
+
+vector_header(AST_BlockItem);
+
+typedef struct {
+    VectorAST_BlockItem block_items;
+} AST_Block;
+
 struct AST_BlockItem {
     AST_BlockItemType type;
     union {
@@ -95,20 +113,22 @@ struct AST_BlockItem {
             AST_BlockItem *then;
             AST_BlockItem *else_;
         };
+        AST_Block block;
     };
 };
-vector_header(AST_BlockItem);
+
 
 typedef struct {
     AST_Identifier name;
-    VectorAST_BlockItem block_items;
+    AST_Block block;
 } AST_Function;
 
 typedef struct {
     AST_Function function;
     int error;
     unsigned var_cnt;
+    unsigned label_cnt;
 } AST_Program;
 
 AST_Program parse_program(VectorTerm _terms);
-void pretty_print_program(AST_Program program, bool variable_resolved);
+void pretty_print_program(AST_Program program);

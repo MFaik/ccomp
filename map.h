@@ -18,12 +18,13 @@ vector_header(VectorSVNumPair);
 typedef struct {
     VectorVectorSVNumPair sv_arr;
     unsigned size;
-    unsigned id;
 } SVMap;
 
-void init_map(SVMap* map, unsigned id_start);
+void init_map(SVMap* map);
 
 //the string view len must be longer than 1
-unsigned insert_map(SVMap* map, StringView sv);
+unsigned insert_map(SVMap* map, StringView sv, unsigned id);
 
 unsigned get_map(SVMap* map, StringView sv);
+
+void free_map(SVMap* map);

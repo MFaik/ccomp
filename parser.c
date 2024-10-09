@@ -36,7 +36,7 @@ AST_BlockItem* alloc_statement(AST_BlockItem statement) {
 
 AST_Expression str_to_exp(StringView sv) {
     AST_Expression ret;
-    ret.type = EXP_VAR;
+    ret.type = EXP_VAR_STR;
     ret.var_str = sv;
     return ret;
 }
@@ -74,7 +74,7 @@ AST_Expression parse_factor() {
             eat_term_adv_ret(TERM_CLOSE_PAR, ret);
             break;
         case TERM_IDENTIFIER:
-            ret.type = EXP_VAR;
+            ret.type = EXP_VAR_STR;
             ret.var_str = terms.array[term_ptr].s;
             term_ptr++;
             break;
@@ -249,6 +249,7 @@ AST_Expression parse_exp(unsigned min_prec) {
     return ret;
 }
 
+AST_Block parse_block();
 AST_BlockItem parse_statement() {
     if(terms.array[term_ptr].type == TERM_RETURN) {
         term_ptr++;
@@ -273,6 +274,21 @@ AST_BlockItem parse_statement() {
             ret.type = AST_STATEMENT_IF_ELSE;
             ret.else_ = alloc_statement(parse_statement());
         }
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_GOTO) {
+        term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_GOTO;
+        ret.exp = str_to_exp(terms.array[term_ptr].s);
+        eat_term_adv_ret(TERM_IDENTIFIER, ret);
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_DO) {
+        todo here !
+        term_ptr++;
+    } else if(terms.array[term_ptr].type == TERM_OPEN_BRACE){
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_COMPOUND;
+        ret.block = parse_block();
         return ret;
     } else {
         AST_BlockItem exp;
@@ -299,30 +315,42 @@ AST_BlockItem parse_declaration() {
 }
 
 AST_BlockItem parse_block_item() {
-    if(terms.array[term_ptr].type == TERM_INT) {
+    if(terms.array[term_ptr].type == TERM_IDENTIFIER && 
+       terms.array[term_ptr+1].type == TERM_COLON) {
+        AST_BlockItem ret;
+        ret.type = AST_LABEL;
+        ret.exp = str_to_exp(terms.array[term_ptr].s); 
+        term_ptr += 2;
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_INT) {
         return parse_declaration();
     } else {
         return parse_statement();
     }
 }
 
+AST_Block parse_block() {
+    AST_Block ret;
+    init_vectorAST_BlockItem(&ret.block_items, 2);
+    eat_term_adv_ret(TERM_OPEN_BRACE, ret);
+    while(terms.array[term_ptr].type != TERM_CLOSE_BRACE) {
+        push_vectorAST_BlockItem(&ret.block_items, parse_block_item());
+        if(error)return ret;
+    }
+    term_ptr++;//eat_term_adv_ret(TERM_CLOSE_BRACE, ret);
+    return ret;
+}
+
 AST_Function parse_function() {
     AST_Function ret;
     eat_term_adv_ret(TERM_INT, ret);
-    eat_term_err_ret(TERM_IDENTIFIER, ret);
+    eat_term_err_ret(TERM_IDENTIFIER, ret);//doesn't advance
     ret.name = (AST_Identifier){terms.array[term_ptr].s};
     term_ptr++;
     eat_term_adv_ret(TERM_OPEN_PAR, ret);
     eat_term_adv_ret(TERM_VOID, ret);
     eat_term_adv_ret(TERM_CLOSE_PAR, ret);
-    eat_term_adv_ret(TERM_OPEN_BRACE, ret);
-    //this depends on the fact that a blockitem can't start with a '}'
-    init_vectorAST_BlockItem(&ret.block_items, 2);
-    while(terms.array[term_ptr].type != TERM_CLOSE_BRACE) {
-        AST_BlockItem bi = parse_block_item();if(error)return ret;
-        insert_vectorAST_BlockItem(&ret.block_items, bi);
-    }
-    eat_term_adv_ret(TERM_CLOSE_BRACE, ret);
+    ret.block = parse_block();
     return ret;
 }
 
@@ -340,8 +368,6 @@ AST_Program parse_program(VectorTerm _terms) {
         ret.error = error;
     return ret;
 }
-
-static bool resolved;
 
 void printf_space(int space) {
     for(int i = 0;i < space;i++)
@@ -376,11 +402,11 @@ void pretty_print_expression(AST_Expression exp) {
         case EXP_CONSTANT:
             printf("%d", exp.constant);
             break;
-        case EXP_VAR:
-            if(!resolved)
-                printf("%.*s", exp.var_str.len, exp.var_str.start);
-            else
-                printf("$%u", exp.var_id);
+        case EXP_VAR_STR:
+            printf("%.*s", exp.var_str.len, exp.var_str.start);
+            break;
+        case EXP_VAR_ID:
+            printf("$%u", exp.var_id);
             break;
         case EXP_CONDITIONAL:
             printf("(");
@@ -520,9 +546,9 @@ void pretty_print_block_item(AST_BlockItem bi, unsigned space) {
             break;
         case AST_STATEMENT_IF:
             printf_space(space);
-            printf("if( ");
+            printf("if(");
             pretty_print_expression(bi.cond);
-            printf(" )\n");
+            printf(")\n");
             pretty_print_block_item(*bi.then, space+1);
             break;
         case AST_STATEMENT_IF_ELSE:
@@ -534,6 +560,25 @@ void pretty_print_block_item(AST_BlockItem bi, unsigned space) {
             printf_space(space);
             printf("else\n");
             pretty_print_block_item(*bi.else_, space+1);
+            break;
+        case AST_STATEMENT_GOTO:
+            printf_space(space);
+            printf("goto ");
+            pretty_print_expression(bi.exp);
+            break;
+        case AST_LABEL:
+            printf_space(space);
+            pretty_print_expression(bi.exp);
+            printf(":\n");
+            break;
+        case AST_STATEMENT_COMPOUND:
+            printf_space(space);
+            printf("{\n");
+            for(int i = 0;i < bi.block.block_items.size;i++) {
+                pretty_print_block_item(bi.block.block_items.array[i], space+1);
+            }
+            printf_space(space);
+            printf("}\n");
             break;
         case AST_DECLARATION_NO_ASSIGN:
             printf_space(space);
@@ -560,14 +605,13 @@ void pretty_print_function(AST_Function f, unsigned space) {
     printf_space(space+1);
     printf("body=\n");
 
-    for(int i = 0;i < f.block_items.size;i++)
-        pretty_print_block_item(f.block_items.array[i], space+2);
+    for(int i = 0;i < f.block.block_items.size;i++)
+        pretty_print_block_item(f.block.block_items.array[i], space+2);
     printf_space(space);
     printf(")\n");
 }
 
-void pretty_print_program(AST_Program program, bool variables_resolved) {  
-    resolved = variables_resolved;
+void pretty_print_program(AST_Program program) {  
     printf("Program(\n");
     pretty_print_function(program.function, 1);
     printf(")\n");

@@ -31,7 +31,7 @@ int main(int argc, char **argv) {
     if(ast_program.error)
         return ast_program.error;
     if(argv[1][0] == 'p') {
-        pretty_print_program(ast_program, false);
+        pretty_print_program(ast_program);
         return 0;
     }
     //semantic anal
@@ -39,7 +39,7 @@ int main(int argc, char **argv) {
     if(ast_program.error)
         return ast_program.error;
     if(argv[1][0] == 's') {
-        pretty_print_program(ast_program, true);
+        pretty_print_program(ast_program);
         return 0;
     }
     //tacky
