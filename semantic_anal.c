@@ -9,21 +9,21 @@ vector_header(SVMap);vector_body(SVMap);
 
 static int error = 0;
 static unsigned map_cnt = 0;
-static VectorSVMap *var_stack;
+static VectorSVMap *map_stack;
 
 unsigned resolve_new_var(AST_Expression *exp) {
-    if(get_map(top_vectorSVMap(var_stack), exp->var_str) != ID_NOT_FOUND) {
+    if(get_map(top_vectorSVMap(map_stack), exp->var_str) != ID_NOT_FOUND) {
         error = 1;
         printf("Redefinition of %.*s\n", exp->var_str.len, exp->var_str.start);
         return ID_NOT_FOUND;
     }
-    return insert_map(top_vectorSVMap(var_stack), exp->var_str, map_cnt++);
+    return insert_map(top_vectorSVMap(map_stack), exp->var_str, map_cnt++);
 }
 
 unsigned resolve_exist_var(AST_Expression *exp) {
     unsigned id = ID_NOT_FOUND;
-    for(int i = var_stack->size-1;i >= 0;i--) {
-        id = get_map(&var_stack->array[i], exp->var_str);
+    for(int i = map_stack->size-1;i >= 0;i--) {
+        id = get_map(&map_stack->array[i], exp->var_str);
         if(id != ID_NOT_FOUND)
             return id;
     }
@@ -31,6 +31,15 @@ unsigned resolve_exist_var(AST_Expression *exp) {
     printf("use of undeclared identifier %.*s\n", exp->var_str.len, exp->var_str.start);
     return ID_NOT_FOUND;
 }
+
+#define push_map_stack()\
+    SVMap map;\
+    init_map(&map);\
+    push_vectorSVMap(map_stack, map);\
+
+#define pop_map_stack()\
+    free_map(top_vectorSVMap(map_stack));\
+    pop_vectorSVMap(map_stack);\
 
 bool is_exp_var(AST_Expression *exp) {
     if(exp->type == EXP_VAR_STR || exp->type == EXP_VAR_ID) {
@@ -120,48 +129,72 @@ void var_resolve_declaration(AST_BlockItem *bi) {
         var_resolve_expression(&bi->assign_exp);
 }
 
-void var_resolve_block(AST_Block *block);;
+void var_resolve_block(AST_Block *block);
+void var_resolve_block_item(AST_BlockItem *bi);
 void var_resolve_statement(AST_BlockItem *bi) {
     if(bi->type == AST_STATEMENT_IF || bi->type == AST_STATEMENT_IF_ELSE) {
-        var_resolve_expression(&bi->cond);
+        var_resolve_expression(&bi->if_cond);
         var_resolve_statement(bi->then);
         if(bi->type == AST_STATEMENT_IF_ELSE)
             var_resolve_statement(bi->else_);
+    } else if(bi->type == AST_STATEMENT_FOR) {
+        push_map_stack();
+        var_resolve_block_item(bi->init);
+        var_resolve_expression(&bi->loop_cond);
+        var_resolve_expression(&bi->loop_it);
+        var_resolve_statement(bi->loop_body);
+        pop_map_stack();
+    } else if(bi->type == AST_STATEMENT_WHILE ||
+              bi->type == AST_STATEMENT_DO_WHILE) {
+        var_resolve_expression(&bi->loop_cond);
+        var_resolve_statement(bi->loop_body);
+    } else if(bi->type == AST_STATEMENT_SWITCH) {
+        var_resolve_expression(&bi->if_cond);
+        var_resolve_statement(bi->then);
     } else if(bi->type == AST_STATEMENT_COMPOUND) {
         var_resolve_block(&bi->block);
-    } else {
-        if(bi->type != AST_STATEMENT_NULL)
-            var_resolve_expression(&bi->exp);
+    } else if(bi->type == AST_STATEMENT_EXP ||
+              bi->type == AST_STATEMENT_RETURN) {
+        var_resolve_expression(&bi->exp);
+    }
+}
+
+void var_resolve_block_item(AST_BlockItem *bi) {
+    switch(bi->type) {
+        case AST_STATEMENT_RETURN:
+        case AST_STATEMENT_EXP:
+        case AST_STATEMENT_NULL:
+        case AST_STATEMENT_IF:
+        case AST_STATEMENT_IF_ELSE:
+        case AST_STATEMENT_COMPOUND:
+        case AST_STATEMENT_WHILE:
+        case AST_STATEMENT_DO_WHILE:
+        case AST_STATEMENT_FOR:
+        case AST_STATEMENT_SWITCH:
+            var_resolve_statement(bi);
+            break;
+        case AST_DECLARATION_NO_ASSIGN:
+        case AST_DECLARATION_WITH_ASSIGN:
+            var_resolve_declaration(bi);
+            break;
+        case AST_STATEMENT_BREAK:
+        case AST_STATEMENT_CONTINUE:
+        case AST_STATEMENT_GOTO:
+        case AST_LABEL:
+        case AST_CASE_LABEL:
+        case AST_DEFAULT_LABEL:
+            break;
     }
 }
 
 void var_resolve_block(AST_Block *block) {
-    SVMap map;
-    init_map(&map);
-    push_vectorSVMap(var_stack, map);
+    push_map_stack();
 
     for(int i = 0;i < block->block_items.size;i++) {
-        switch(block->block_items.array[i].type) {
-            case AST_STATEMENT_RETURN:
-            case AST_STATEMENT_EXP:
-            case AST_STATEMENT_NULL:
-            case AST_STATEMENT_IF:
-            case AST_STATEMENT_IF_ELSE:
-            case AST_STATEMENT_COMPOUND:
-                var_resolve_statement(&block->block_items.array[i]);
-                break;
-            case AST_DECLARATION_NO_ASSIGN:
-            case AST_DECLARATION_WITH_ASSIGN:
-                var_resolve_declaration(&block->block_items.array[i]);
-                break;
-            case AST_STATEMENT_GOTO:
-            case AST_LABEL:
-                break;
-        }
+        var_resolve_block_item(&block->block_items.array[i]);
     }
 
-    free_map(top_vectorSVMap(var_stack));
-    pop_vectorSVMap(var_stack);
+    pop_map_stack();
 }
 
 void var_resolve_function(AST_Function *f) {
@@ -184,6 +217,12 @@ void label_resolve_block_item(AST_BlockItem *bi, bool is_label, bool last) {
     } else if(bi->type == AST_STATEMENT_IF_ELSE) {
         label_resolve_block_item(bi->then, is_label, true);
         label_resolve_block_item(bi->else_, is_label, true);
+    } else if(bi->type == AST_STATEMENT_FOR ||
+              bi->type == AST_STATEMENT_WHILE ||
+              bi->type == AST_STATEMENT_DO_WHILE) {
+        label_resolve_block_item(bi->loop_body, is_label, true);
+    } else if(bi->type == AST_STATEMENT_SWITCH) {
+        label_resolve_block_item(bi->then, is_label, true);
     } else if(is_label && bi->type == AST_LABEL) {
         bi->exp.type = EXP_VAR_ID;
         bi->exp.var_id = resolve_new_var(&bi->exp);
@@ -207,28 +246,76 @@ void label_resolve_block(AST_Block *b, bool is_label) {
 
 void label_resolve_program(AST_Program *p) {
     map_cnt = 0;
-    SVMap map;
-    init_map(&map);
-    push_vectorSVMap(var_stack, map);
+    push_map_stack();
 
     label_resolve_block(&p->function.block, true);
     label_resolve_block(&p->function.block, false);
 
     p->label_cnt = map_cnt;
 
-    free_map(&map);
-    pop_vectorSVMap(var_stack);
+    pop_map_stack();
+}
+
+static unsigned max_break_label;
+static unsigned min_break_label;
+void loop_resolve_block(AST_Block *b, unsigned cont_label, unsigned break_label);
+void loop_resolve_block_item(AST_BlockItem *bi, unsigned cont_label, unsigned break_label) {
+    if(bi->type == AST_STATEMENT_COMPOUND) {
+        loop_resolve_block(&bi->block, cont_label, break_label);
+    } else if(bi->type == AST_STATEMENT_IF) {
+        loop_resolve_block_item(bi->then, cont_label, break_label);
+    } else if(bi->type == AST_STATEMENT_IF_ELSE) {
+        loop_resolve_block_item(bi->then, cont_label, break_label);
+        loop_resolve_block_item(bi->else_, cont_label, break_label);
+    } else if(bi->type == AST_STATEMENT_FOR ||
+              bi->type == AST_STATEMENT_WHILE ||
+              bi->type == AST_STATEMENT_DO_WHILE) {
+        bi->loop_id = max_break_label += 2;
+        loop_resolve_block_item(bi->loop_body, bi->loop_id, bi->loop_id);
+    } else if(bi->type == AST_STATEMENT_SWITCH) {
+        bi->switch_id = max_break_label += 1;
+        loop_resolve_block_item(bi->then, cont_label, bi->switch_id);
+    } else if(bi->type == AST_STATEMENT_BREAK) {
+        if(break_label < min_break_label) {
+            printf("break statement not in loop or switch statement\n");
+            error = 5;
+            return;
+        }
+        bi->exp.var_id = break_label;
+    } else if(bi->type == AST_STATEMENT_CONTINUE) {
+        if(cont_label < min_break_label) {
+            printf("continue statement not in loop statement\n");
+            error = 6;
+            return;
+        }
+        bi->exp.var_id = cont_label-1;
+    }
+}
+
+void loop_resolve_block(AST_Block *b, unsigned cont_label, unsigned break_label) {
+    for(unsigned i = 0;i < b->block_items.size;i++) {
+        loop_resolve_block_item(&b->block_items.array[i], cont_label, break_label);
+    }
+}
+
+void loop_resolve_program(AST_Program *p) {
+    max_break_label = p->label_cnt+1;
+    min_break_label = p->label_cnt+1;
+    loop_resolve_block(&p->function.block, p->label_cnt, p->label_cnt);
+    p->label_cnt = max_break_label;
 }
 
 void resolve_program(AST_Program *p) {
     error = 0;
-    VectorSVMap vs;
-    init_vectorSVMap(&vs, 2);
-    var_stack = &vs;
+    VectorSVMap ms;
+    init_vectorSVMap(&ms, 2);
+    map_stack = &ms;
 
     var_resolve_program(p);
     p->error = error;
     if(error)return;
     label_resolve_program(p);
+    p->error = error;
+    loop_resolve_program(p);
     p->error = error;
 }

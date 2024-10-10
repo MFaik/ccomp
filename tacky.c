@@ -29,6 +29,13 @@ TAC_Val generate_new_label() {
     return ret;
 }
 
+TAC_Val generate_var(unsigned u) {
+    TAC_Val ret;
+    ret.type = TAC_VAL_VAR;
+    ret.var = u;
+    return ret;
+}
+
 TAC_Val tac_copy(TAC_Val src, TAC_Val dst, VectorTAC_Ins *v) {
     TAC_Ins copy;
     copy.type = TAC_INS_COPY;
@@ -103,8 +110,7 @@ TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTA
 }
 
 TAC_Val tac_binary_assign(TAC_Ins_Type type, AST_Expression exp, VectorTAC_Ins *v) {
-    tac_binary(exp, type, v);
-    return tac_copy(tac_binary(exp, TAC_INS_BINARY_ADD, v), 
+    return tac_copy(tac_binary(exp, type, v), 
             tac_expression(*exp.left_exp, v) ,v);
 }
 
@@ -268,7 +274,7 @@ void tac_statement(AST_BlockItem bi, VectorTAC_Ins *v) {
             if(bi.type == AST_STATEMENT_IF_ELSE)
                 end_label = generate_new_label();
 
-            TAC_Val cond = tac_expression(bi.cond, v);
+            TAC_Val cond = tac_expression(bi.if_cond, v);
             tac_jump_cond(false, cond, else_label, v);
 
             tac_statement(*bi.then, v);
@@ -285,6 +291,66 @@ void tac_statement(AST_BlockItem bi, VectorTAC_Ins *v) {
             }
             break;
         }
+        case AST_STATEMENT_WHILE:
+        {
+            TAC_Val cont_label = generate_var(bi.loop_id-1);
+            TAC_Val break_label = generate_var(bi.loop_id);
+            
+            tac_label(cont_label, v);
+
+            TAC_Val cond = tac_expression(bi.loop_cond, v);
+            tac_jump_cond(false, cond, break_label, v);
+
+            tac_statement(*bi.loop_body, v);
+
+            tac_jump(cont_label, v);
+
+            tac_label(break_label, v);
+            break;
+        }
+        case AST_STATEMENT_DO_WHILE:
+        {
+            TAC_Val cont_label = generate_var(bi.loop_id-1);
+            TAC_Val break_label = generate_var(bi.loop_id);
+            TAC_Val start_label = generate_new_label();
+
+            tac_label(start_label, v);
+
+            tac_statement(*bi.loop_body, v);
+
+            tac_label(cont_label, v);
+            TAC_Val cond = tac_expression(bi.loop_cond, v);
+            tac_jump_cond(true, cond, start_label, v);
+
+            tac_label(break_label, v);
+            
+            break;
+        }
+        case AST_STATEMENT_FOR:
+        {
+            TAC_Val cont_label = generate_var(bi.loop_id-1);
+            TAC_Val break_label = generate_var(bi.loop_id);
+            TAC_Val start_label = generate_new_label();
+            
+            tac_statement(*bi.init, v);
+
+            tac_label(start_label, v);
+            TAC_Val cond = tac_expression(bi.loop_cond, v);
+            tac_jump_cond(false, cond, break_label, v);
+
+            tac_statement(*bi.loop_body, v);
+            tac_label(cont_label, v);
+            tac_expression(bi.loop_it, v);
+
+            tac_jump(start_label, v);
+
+            tac_label(break_label, v);
+            break;
+        }
+        case AST_STATEMENT_BREAK:
+        case AST_STATEMENT_CONTINUE:
+            tac_jump(generate_var(bi.exp.var_id), v);
+            break;
         case AST_DECLARATION_WITH_ASSIGN:
             tac_copy(tac_expression(bi.assign_exp, v), 
                      tac_expression(bi.var, v), v);
@@ -314,7 +380,7 @@ TAC_Function tac_function(AST_Function function) {
 
 TAC_Program emit_tacky(AST_Program ast_program) {
     var_counter = ast_program.var_cnt;
-    label_counter = ast_program.label_cnt;
+    label_counter = ast_program.label_cnt+1;
 
     TAC_Program ret;
     ret.function = tac_function(ast_program.function);

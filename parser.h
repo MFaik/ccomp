@@ -86,9 +86,12 @@ typedef enum {
     AST_STATEMENT_WHILE,
     AST_STATEMENT_DO_WHILE,
     AST_STATEMENT_FOR,
+    AST_STATEMENT_SWITCH,
     AST_DECLARATION_NO_ASSIGN,
     AST_DECLARATION_WITH_ASSIGN,
     AST_LABEL,
+    AST_CASE_LABEL,
+    AST_DEFAULT_LABEL,
 } AST_BlockItemType;
 
 //pre-decleration shenanigans
@@ -109,9 +112,17 @@ struct AST_BlockItem {
             AST_Expression assign_exp;
         };
         struct {
-            AST_Expression cond;
+            AST_Expression if_cond;
             AST_BlockItem *then;
             AST_BlockItem *else_;
+            unsigned switch_id;
+        };
+        struct {
+            AST_Expression loop_cond;
+            AST_BlockItem *init;
+            AST_Expression loop_it;
+            AST_BlockItem *loop_body;
+            unsigned loop_id;
         };
         AST_Block block;
     };

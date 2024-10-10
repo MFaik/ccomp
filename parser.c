@@ -34,6 +34,10 @@ AST_BlockItem* alloc_statement(AST_BlockItem statement) {
     return ret;
 }
 
+AST_BlockItem* alloc_declaration(AST_BlockItem declaration) {
+    return alloc_statement(declaration);
+}
+
 AST_Expression str_to_exp(StringView sv) {
     AST_Expression ret;
     ret.type = EXP_VAR_STR;
@@ -222,7 +226,7 @@ AST_ExpressionType binary_term_to_exp(TermType t) {
     }
 }
 
-bool right_assoc(TermType t) {
+bool is_right_assoc(TermType t) {
     return t == TERM_ASSIGN ||
            t == TERM_QUESTION;
 }
@@ -233,7 +237,7 @@ AST_Expression parse_exp(unsigned min_prec) {
     while(term_ptr < terms.size && next_prec > min_prec) {
         ret.left_exp = alloc_exp(ret);
         ret.type = binary_term_to_exp(terms.array[term_ptr].type);
-        if(right_assoc(terms.array[term_ptr].type))
+        if(is_right_assoc(terms.array[term_ptr].type))
             next_prec--;
         term_ptr++;
         if(ret.type == EXP_CONDITIONAL) {
@@ -246,6 +250,28 @@ AST_Expression parse_exp(unsigned min_prec) {
         }
         next_prec = binary_precedence(terms.array[term_ptr].type);
     }
+    return ret;
+}
+
+bool is_declaration() {
+    if(terms.array[term_ptr].type == TERM_INT) {
+        return true;
+    }
+    return false;
+}
+
+AST_BlockItem parse_declaration() {
+    AST_BlockItem ret;
+    ret.type = AST_DECLARATION_NO_ASSIGN;
+    eat_term_adv_ret(TERM_INT, ret);
+    ret.var = str_to_exp(terms.array[term_ptr].s);
+    eat_term_adv_ret(TERM_IDENTIFIER, ret);
+    if(terms.array[term_ptr].type == TERM_ASSIGN) {
+        ret.type = AST_DECLARATION_WITH_ASSIGN;
+        term_ptr++;
+        ret.assign_exp = parse_exp(0);if(error)return ret;
+    }
+    eat_term_adv_ret(TERM_SEMICOLON, ret);
     return ret;
 }
 
@@ -266,7 +292,7 @@ AST_BlockItem parse_statement() {
         AST_BlockItem ret;
         ret.type = AST_STATEMENT_IF;
         eat_term_adv_ret(TERM_OPEN_PAR, ret);
-        ret.cond = parse_exp(0);if(error)return ret;
+        ret.if_cond = parse_exp(0);if(error)return ret;
         eat_term_adv_ret(TERM_CLOSE_PAR, ret);
         ret.then = alloc_statement(parse_statement());
         if(terms.array[term_ptr].type == TERM_ELSE) {
@@ -283,8 +309,77 @@ AST_BlockItem parse_statement() {
         eat_term_adv_ret(TERM_IDENTIFIER, ret);
         return ret;
     } else if(terms.array[term_ptr].type == TERM_DO) {
-        todo here !
         term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_DO_WHILE;
+        ret.loop_body = alloc_statement(parse_statement());
+        eat_term_adv_ret(TERM_WHILE, ret);
+        eat_term_adv_ret(TERM_OPEN_PAR, ret);
+        ret.loop_cond = parse_exp(0);
+        eat_term_adv_ret(TERM_CLOSE_PAR, ret);
+        eat_term_adv_ret(TERM_SEMICOLON, ret);
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_WHILE) {
+        term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_WHILE;
+        eat_term_adv_ret(TERM_OPEN_PAR, ret);
+        ret.loop_cond = parse_exp(0);
+        eat_term_adv_ret(TERM_CLOSE_PAR, ret);
+        ret.loop_body = alloc_statement(parse_statement());
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_FOR) {
+        term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_FOR;
+        AST_Expression exp_1;
+        exp_1.type = EXP_CONSTANT;
+        exp_1.constant = 1;
+        ret.loop_cond = exp_1;
+        ret.loop_it = exp_1;
+        eat_term_adv_ret(TERM_OPEN_PAR, ret);
+        if(is_declaration()) {
+            ret.init = alloc_declaration(parse_declaration());
+        } else {
+            AST_BlockItem init;
+            init.type = AST_STATEMENT_EXP;
+            if(terms.array[term_ptr].type == TERM_SEMICOLON) {
+                init.exp = exp_1;
+            } else {
+                init.exp = parse_exp(0);
+            }
+            ret.init = alloc_statement(init);
+            eat_term_adv_ret(TERM_SEMICOLON, ret);
+        }
+        if(terms.array[term_ptr].type != TERM_SEMICOLON)
+            ret.loop_cond = parse_exp(0);
+        eat_term_adv_ret(TERM_SEMICOLON, ret);
+        if(terms.array[term_ptr].type != TERM_CLOSE_PAR)
+            ret.loop_it = parse_exp(0);
+        eat_term_adv_ret(TERM_CLOSE_PAR, ret);
+        ret.loop_body = alloc_statement(parse_statement());
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_CONTINUE) {
+        term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_CONTINUE;
+        eat_term_adv_ret(TERM_SEMICOLON, ret);
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_BREAK) {
+        term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_BREAK;
+        eat_term_adv_ret(TERM_SEMICOLON, ret);
+        return ret;
+    } else if(terms.array[term_ptr].type == TERM_SWITCH) {
+        term_ptr++;
+        AST_BlockItem ret;
+        ret.type = AST_STATEMENT_SWITCH;
+        eat_term_adv_ret(TERM_OPEN_PAR, ret);
+        ret.if_cond = parse_exp(0);
+        eat_term_adv_ret(TERM_CLOSE_PAR, ret);
+        ret.then = alloc_statement(parse_statement());
+        return ret;
     } else if(terms.array[term_ptr].type == TERM_OPEN_BRACE){
         AST_BlockItem ret;
         ret.type = AST_STATEMENT_COMPOUND;
@@ -299,30 +394,42 @@ AST_BlockItem parse_statement() {
     }
 }
 
-AST_BlockItem parse_declaration() {
-    AST_BlockItem ret;
-    ret.type = AST_DECLARATION_NO_ASSIGN;
-    eat_term_adv_ret(TERM_INT, ret);
-    ret.var = str_to_exp(terms.array[term_ptr].s);
-    eat_term_adv_ret(TERM_IDENTIFIER, ret);
-    if(terms.array[term_ptr].type == TERM_ASSIGN) {
-        ret.type = AST_DECLARATION_WITH_ASSIGN;
-        term_ptr++;
-        ret.assign_exp = parse_exp(0);if(error)return ret;
-    }
-    eat_term_adv_ret(TERM_SEMICOLON, ret);
-    return ret;
+bool is_label() {
+    if(terms.array[term_ptr].type == TERM_CASE)
+        return true;
+    if(terms.array[term_ptr].type == TERM_IDENTIFIER &&
+       terms.array[term_ptr+1].type == TERM_COLON)
+        return true;
+    if(terms.array[term_ptr].type == TERM_DEFAULT && 
+       terms.array[term_ptr+1].type == TERM_COLON)
+        return true;
+    return false;
 }
-
-AST_BlockItem parse_block_item() {
-    if(terms.array[term_ptr].type == TERM_IDENTIFIER && 
-       terms.array[term_ptr+1].type == TERM_COLON) {
-        AST_BlockItem ret;
+AST_BlockItem parse_label() {
+    AST_BlockItem ret;
+    if(terms.array[term_ptr].type == TERM_IDENTIFIER) {
         ret.type = AST_LABEL;
         ret.exp = str_to_exp(terms.array[term_ptr].s); 
         term_ptr += 2;
         return ret;
-    } else if(terms.array[term_ptr].type == TERM_INT) {
+    }
+    if(terms.array[term_ptr].type == TERM_DEFAULT) {
+        ret.type = AST_DEFAULT_LABEL;
+        term_ptr += 2;
+        return ret;
+    }
+    //case label
+    ret.type = AST_CASE_LABEL;
+    term_ptr++;//eat_term_adv_ret(TERM_CASE, ret);
+    ret.exp = parse_exp(0);
+    eat_term_adv_ret(TERM_COLON, ret);
+    return ret;
+}
+
+AST_BlockItem parse_block_item() {
+    if(is_label()) {
+        return parse_label();
+    } else if(is_declaration()) {
         return parse_declaration();
     } else {
         return parse_statement();
@@ -529,72 +636,112 @@ void pretty_print_expression(AST_Expression exp) {
 }
 
 void pretty_print_block_item(AST_BlockItem bi, unsigned space) {
+    if(bi.type == AST_STATEMENT_COMPOUND)
+        space--;
+    printf_space(space);
     switch(bi.type) {
         case AST_STATEMENT_RETURN:
-            printf_space(space);
             printf("return ");
             pretty_print_expression(bi.exp);
-            printf(";\n");
+            printf(";");
             break;
         case AST_STATEMENT_EXP:
-            printf_space(space);
             pretty_print_expression(bi.exp);
-            printf(";\n");
+            printf(";");
             break;
         case AST_STATEMENT_NULL:
-            printf(";\n");
+            printf(";");
             break;
         case AST_STATEMENT_IF:
-            printf_space(space);
             printf("if(");
-            pretty_print_expression(bi.cond);
+            pretty_print_expression(bi.if_cond);
             printf(")\n");
             pretty_print_block_item(*bi.then, space+1);
             break;
         case AST_STATEMENT_IF_ELSE:
-            printf_space(space);
             printf("if( ");
-            pretty_print_expression(bi.cond);
+            pretty_print_expression(bi.if_cond);
             printf(" )\n");
             pretty_print_block_item(*bi.then, space+1);
             printf_space(space);
             printf("else\n");
             pretty_print_block_item(*bi.else_, space+1);
             break;
-        case AST_STATEMENT_GOTO:
+        case AST_STATEMENT_FOR:
+            printf("for(");
+            pretty_print_block_item(*bi.init, 0);
+            pretty_print_expression(bi.loop_cond);
+            printf(";");
+            pretty_print_expression(bi.loop_it);
+            printf(")%u\n", bi.loop_id);
+            pretty_print_block_item(*bi.loop_body, space+1);
+            break;
+        case AST_STATEMENT_DO_WHILE:
+            printf("do\n");
+            pretty_print_block_item(*bi.loop_body, space+1);
             printf_space(space);
+            printf("while(");
+            pretty_print_expression(bi.loop_cond);
+            printf(");%u", bi.loop_id);
+            break;
+        case AST_STATEMENT_WHILE:
+            printf("while(");
+            pretty_print_expression(bi.loop_cond);
+            printf(")%u\n", bi.loop_id);
+            pretty_print_block_item(*bi.loop_body, space+1);
+            break;
+        case AST_STATEMENT_BREAK:
+            printf("break;%u", bi.exp.var_id);
+            break;
+        case AST_STATEMENT_CONTINUE:
+            printf("continue;%u", bi.exp.var_id);
+            break;
+        case AST_STATEMENT_GOTO:
             printf("goto ");
             pretty_print_expression(bi.exp);
+            printf(";");
+            break;
+        case AST_STATEMENT_SWITCH:
+            printf("switch(");
+            pretty_print_expression(bi.if_cond);
+            printf(")%u\n", bi.switch_id);
+            pretty_print_block_item(*bi.then, space+1);
             break;
         case AST_LABEL:
-            printf_space(space);
             pretty_print_expression(bi.exp);
-            printf(":\n");
+            printf(":");
+            break;
+        case AST_DEFAULT_LABEL:
+            printf("default:");
+            break;
+        case AST_CASE_LABEL:
+            printf("case ");
+            pretty_print_expression(bi.exp);
+            printf(":");
             break;
         case AST_STATEMENT_COMPOUND:
-            printf_space(space);
             printf("{\n");
             for(int i = 0;i < bi.block.block_items.size;i++) {
                 pretty_print_block_item(bi.block.block_items.array[i], space+1);
             }
             printf_space(space);
-            printf("}\n");
+            printf("}");
             break;
         case AST_DECLARATION_NO_ASSIGN:
-            printf_space(space);
             printf("int ");
             pretty_print_expression(bi.var);
-            printf(";\n");
+            printf(";");
             break;
         case AST_DECLARATION_WITH_ASSIGN:
-            printf_space(space);
             printf("int ");
             pretty_print_expression(bi.var);
             printf(" = ");
             pretty_print_expression(bi.assign_exp);
-            printf(";\n");
+            printf(";");
             break;
     }
+    if(space > 0)
+        printf("\n");
 }
 
 void pretty_print_function(AST_Function f, unsigned space) {

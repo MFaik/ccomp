@@ -19,6 +19,9 @@ const char* TermNames[] = {
     "for",
     "break",
     "continue",
+    "switch",
+    "case",
+    "default",
     "question",
     "colon",
     "complement",
@@ -81,6 +84,9 @@ struct {
     {TERM_FOR, "for", 3},
     {TERM_BREAK, "break", 5},
     {TERM_CONTINUE, "continue", 8},
+    {TERM_SWITCH, "switch", 6},
+    {TERM_CASE, "case", 4},
+    {TERM_DEFAULT, "default", 7},
 };
 
 //the symbols are in decreasing order 

@@ -46,3 +46,7 @@ void free_vector##Type(Vector##Type *v) {\
     v->array = 0;\
     v->size = v->capacity = 0;\
 }
+
+#define Unsigned unsigned
+vector_header(Unsigned);
+#undef Unsigned
