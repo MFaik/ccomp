@@ -103,6 +103,12 @@ typedef struct {
     VectorAST_BlockItem block_items;
 } AST_Block;
 
+typedef struct {
+    int const_int;
+    unsigned label;
+} IntLabelPair;
+vector_header(IntLabelPair);
+
 struct AST_BlockItem {
     AST_BlockItemType type;
     union {
@@ -115,7 +121,6 @@ struct AST_BlockItem {
             AST_Expression if_cond;
             AST_BlockItem *then;
             AST_BlockItem *else_;
-            unsigned switch_id;
         };
         struct {
             AST_Expression loop_cond;
@@ -123,6 +128,13 @@ struct AST_BlockItem {
             AST_Expression loop_it;
             AST_BlockItem *loop_body;
             unsigned loop_id;
+        };
+        struct {
+            AST_Expression switch_exp;
+            AST_BlockItem *switch_body;
+            VectorIntLabelPair labels;
+            unsigned default_label;
+            unsigned switch_id;
         };
         AST_Block block;
     };

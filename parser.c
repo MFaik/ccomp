@@ -1,5 +1,6 @@
 #include "parser.h"
 vector_body(AST_BlockItem);
+vector_body(IntLabelPair);
 
 #include <stdio.h>
 
@@ -376,9 +377,9 @@ AST_BlockItem parse_statement() {
         AST_BlockItem ret;
         ret.type = AST_STATEMENT_SWITCH;
         eat_term_adv_ret(TERM_OPEN_PAR, ret);
-        ret.if_cond = parse_exp(0);
+        ret.switch_exp = parse_exp(0);
         eat_term_adv_ret(TERM_CLOSE_PAR, ret);
-        ret.then = alloc_statement(parse_statement());
+        ret.switch_body = alloc_statement(parse_statement());
         return ret;
     } else if(terms.array[term_ptr].type == TERM_OPEN_BRACE){
         AST_BlockItem ret;
@@ -713,6 +714,7 @@ void pretty_print_block_item(AST_BlockItem bi, unsigned space) {
             break;
         case AST_DEFAULT_LABEL:
             printf("default:");
+            pretty_print_expression(bi.exp);
             break;
         case AST_CASE_LABEL:
             printf("case ");

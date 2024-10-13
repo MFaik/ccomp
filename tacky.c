@@ -77,14 +77,19 @@ TAC_Val tac_unary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
     return ins.unary_dst;
 }
 
-TAC_Val tac_binary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
+TAC_Val tac_binary_val(TAC_Val left, TAC_Val right, TAC_Ins_Type type, VectorTAC_Ins *v) {
     TAC_Ins ins;
     ins.type = type;
-    ins.src1 = tac_expression(*exp.left_exp, v);
-    ins.src2 = tac_expression(*exp.right_exp, v);
+    ins.src1 = left;
+    ins.src2 = right;
     ins.binary_dst = generate_new_var();
     push_vectorTAC_Ins(v, ins);
     return ins.binary_dst;
+}
+
+TAC_Val tac_binary(AST_Expression exp, TAC_Ins_Type type, VectorTAC_Ins *v) {
+    return tac_binary_val(tac_expression(*exp.left_exp, v),
+                          tac_expression(*exp.right_exp, v), type, v);
 }
 
 TAC_Val tac_binary_short_circuit(AST_Expression exp, bool jump_on_true, VectorTAC_Ins *v) {
@@ -347,18 +352,44 @@ void tac_statement(AST_BlockItem bi, VectorTAC_Ins *v) {
             tac_label(break_label, v);
             break;
         }
-        case AST_STATEMENT_BREAK:
-        case AST_STATEMENT_CONTINUE:
-            tac_jump(generate_var(bi.exp.var_id), v);
+        //TODO: add jump table and binary search where it is appropriate
+        case AST_STATEMENT_SWITCH:
+        {    
+            TAC_Val break_label = generate_var(bi.switch_id);
+
+            TAC_Val exp = tac_expression(bi.switch_exp, v);
+
+            for(unsigned i = 0;i < bi.labels.size;i++) {
+                TAC_Val cond = tac_binary_val(exp, 
+                        generate_constant(bi.labels.array[i].const_int),
+                        TAC_INS_BINARY_EQUAL, v);
+                TAC_Val label = generate_var(bi.labels.array[i].label);
+                tac_jump_cond(true, cond, label, v);
+            }
+
+            if(bi.default_label != 0) {
+                tac_jump(generate_var(bi.default_label), v);
+            } else {
+                tac_jump(break_label, v);
+            }
+
+            tac_statement(*bi.switch_body, v);
+
+            tac_label(break_label, v);
             break;
+        }
         case AST_DECLARATION_WITH_ASSIGN:
             tac_copy(tac_expression(bi.assign_exp, v), 
                      tac_expression(bi.var, v), v);
             break;
+        case AST_STATEMENT_BREAK:
+        case AST_STATEMENT_CONTINUE:
         case AST_STATEMENT_GOTO:
             tac_jump(tac_expression(bi.exp, v), v);
             break;
         case AST_LABEL:
+        case AST_CASE_LABEL:
+        case AST_DEFAULT_LABEL:
             tac_label(tac_expression(bi.exp, v), v);
             break;
         case AST_STATEMENT_NULL:
